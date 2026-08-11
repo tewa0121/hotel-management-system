@@ -12,6 +12,10 @@ const authRoutes = require('./routes/authRoutes');
 const guestRoutes = require('./routes/guestRoutes');
 const roomRoutes = require('./routes/roomRoutes');
 const reservationRoutes = require('./routes/reservationRoutes');
+const paymentRoutes = require('./routes/paymentRoutes');
+const housekeepingRoutes = require('./routes/housekeepingRoutes');
+const maintenanceRoutes = require('./routes/maintenanceRoutes');
+const reportRoutes = require('./routes/reportRoutes');
 
 const app = express();
 
@@ -41,6 +45,10 @@ app.use('/api/auth', authRoutes);
 app.use('/api/guests', guestRoutes);
 app.use('/api/rooms', roomRoutes);
 app.use('/api/reservations', reservationRoutes);
+app.use('/api/payments', paymentRoutes);
+app.use('/api/housekeeping', housekeepingRoutes);
+app.use('/api/maintenance', maintenanceRoutes);
+app.use('/api/reports', reportRoutes);
 
 // Error handling middleware
 app.use(errorHandler);
