@@ -1,7 +1,7 @@
 import api from './api';
 
 const paymentService = {
-  // Get all payments
+  // Get all payments with pagination
   async getPayments(page = 1, limit = 20, status = '') {
     try {
       const response = await api.get('/payments', {

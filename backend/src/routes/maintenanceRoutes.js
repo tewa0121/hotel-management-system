@@ -1,10 +1,13 @@
 const express = require('express');
-const { pool } = require('../config/db');
+const { pool } = require('../config/database');
 const { verifyToken, authorize } = require('../middleware/auth');
+const Maintenance = require('../models/Maintenance');
 
 const router = express.Router();
 
-// Get all maintenance requests
+// ============================================
+// GET all maintenance requests
+// ============================================
 router.get('/', verifyToken, async (req, res) => {
     try {
         const status = req.query.status || '';
@@ -50,42 +53,15 @@ router.get('/', verifyToken, async (req, res) => {
     }
 });
 
-// Get maintenance dashboard
+// ============================================
+// GET maintenance dashboard
+// ============================================
 router.get('/dashboard', verifyToken, async (req, res) => {
     try {
-        // Get request counts by status
-        const [statusCounts] = await pool.execute(`
-            SELECT status, COUNT(*) as count
-            FROM maintenance
-            GROUP BY status
-        `);
-
-        // Get open requests with room info
-        const [openRequests] = await pool.execute(`
-            SELECT m.*, r.room_number, r.building, r.floor
-            FROM maintenance m
-            LEFT JOIN rooms r ON m.room_id = r.id
-            WHERE m.status IN ('open', 'assigned', 'in_progress')
-            ORDER BY m.priority DESC, m.created_at ASC
-            LIMIT 20
-        `);
-
-        // Get rooms under maintenance
-        const [roomsUnderMaintenance] = await pool.execute(`
-            SELECT r.*, rt.name as room_type_name
-            FROM rooms r
-            LEFT JOIN room_types rt ON r.room_type_id = rt.id
-            WHERE r.status = 'maintenance'
-            ORDER BY r.room_number
-        `);
-
+        const dashboard = await Maintenance.getDashboard();
         res.json({
             success: true,
-            data: {
-                summary: statusCounts,
-                openRequests,
-                roomsUnderMaintenance
-            }
+            data: dashboard
         });
     } catch (error) {
         console.error('Error fetching maintenance dashboard:', error);
@@ -96,7 +72,9 @@ router.get('/dashboard', verifyToken, async (req, res) => {
     }
 });
 
-// Create maintenance request
+// ============================================
+// POST create maintenance request
+// ============================================
 router.post('/', verifyToken, async (req, res) => {
     const connection = await pool.getConnection();
     try {
@@ -130,7 +108,6 @@ router.post('/', verifyToken, async (req, res) => {
             ]
         );
 
-        // Update room status to maintenance if priority is high or critical
         if (priority === 'high' || priority === 'critical') {
             await connection.execute(
                 'UPDATE rooms SET status = ? WHERE id = ?',
@@ -165,11 +142,13 @@ router.post('/', verifyToken, async (req, res) => {
     }
 });
 
-// Update maintenance request
+// ============================================
+// PUT update maintenance request - FIXED
+// ============================================
 router.put('/:id', verifyToken, async (req, res) => {
-    const connection = await pool.getConnection();
     try {
-        await connection.beginTransaction();
+        console.log(`📥 PUT /maintenance/${req.params.id}`);
+        console.log('📤 Request body:', req.body);
 
         const {
             category,
@@ -183,145 +162,164 @@ router.put('/:id', verifyToken, async (req, res) => {
             notes
         } = req.body;
 
-        const [result] = await connection.execute(
-            `UPDATE maintenance SET
-                category = ?,
-                description = ?,
-                priority = ?,
-                assigned_to = ?,
-                status = ?,
-                start_date = ?,
-                completion_date = ?,
-                cost = ?,
-                notes = ?
-            WHERE id = ?`,
-            [
-                category, description, priority,
-                assigned_to, status, start_date || null,
-                completion_date || null, cost || null,
-                notes, req.params.id
-            ]
-        );
-
-        if (result.affectedRows === 0) {
-            await connection.rollback();
+        // Check if request exists
+        const existing = await Maintenance.findById(req.params.id);
+        if (!existing) {
             return res.status(404).json({
                 success: false,
                 message: 'Request not found'
             });
         }
 
-        // Get room_id for this maintenance
-        const [request] = await connection.execute(
-            'SELECT room_id FROM maintenance WHERE id = ?',
-            [req.params.id]
-        );
+        // ✅ Use the model's update method
+        const updated = await Maintenance.update(req.params.id, req.body);
 
-        // Update room status based on maintenance status
-        if (request.length > 0) {
+        // Update room status if needed
+        if (status !== undefined && status !== existing.status) {
             if (status === 'completed' || status === 'cancelled') {
                 // Check if room has other open maintenance requests
-                const [otherRequests] = await connection.execute(
-                    'SELECT COUNT(*) as count FROM maintenance WHERE room_id = ? AND status IN ("open", "assigned", "in_progress") AND id != ?',
-                    [request[0].room_id, req.params.id]
+                const allRequests = await Maintenance.findAll();
+                const hasOpen = allRequests.some(r => 
+                    r.room_id === existing.room_id && 
+                    r.id !== parseInt(req.params.id) &&
+                    ['open', 'assigned', 'in_progress'].includes(r.status)
                 );
 
-                if (otherRequests[0].count === 0) {
-                    await connection.execute(
+                if (!hasOpen) {
+                    await pool.execute(
                         'UPDATE rooms SET status = ? WHERE id = ?',
-                        ['available', request[0].room_id]
+                        ['available', existing.room_id]
                     );
                 }
             } else if (status === 'assigned' || status === 'in_progress') {
-                await connection.execute(
+                await pool.execute(
                     'UPDATE rooms SET status = ? WHERE id = ?',
-                    ['maintenance', request[0].room_id]
+                    ['maintenance', existing.room_id]
                 );
             }
         }
 
-        await connection.commit();
-
-        const [updatedRequest] = await connection.execute(`
-            SELECT m.*, r.room_number, u.name as assigned_to_name
-            FROM maintenance m
-            LEFT JOIN rooms r ON m.room_id = r.id
-            LEFT JOIN users u ON m.assigned_to = u.id
-            WHERE m.id = ?
-        `, [req.params.id]);
+        console.log('✅ Update successful:', updated);
 
         res.json({
             success: true,
             message: 'Request updated successfully',
-            data: updatedRequest[0]
+            data: updated
         });
     } catch (error) {
-        await connection.rollback();
-        console.error('Error updating maintenance request:', error);
+        console.error('❌ Error updating maintenance request:', error);
         res.status(500).json({
             success: false,
-            message: 'Error updating maintenance request'
+            message: 'Error updating maintenance request',
+            error: error.message
         });
-    } finally {
-        connection.release();
     }
 });
 
-// Delete maintenance request
+// ============================================
+// DELETE maintenance request
+// ============================================
 router.delete('/:id', verifyToken, authorize('admin', 'manager'), async (req, res) => {
-    const connection = await pool.getConnection();
     try {
-        await connection.beginTransaction();
-
-        // Get room_id before deleting
-        const [request] = await connection.execute(
-            'SELECT room_id FROM maintenance WHERE id = ?',
-            [req.params.id]
-        );
-
-        const [result] = await connection.execute(
-            'DELETE FROM maintenance WHERE id = ?',
-            [req.params.id]
-        );
-
-        if (result.affectedRows === 0) {
-            await connection.rollback();
+        const existing = await Maintenance.findById(req.params.id);
+        if (!existing) {
             return res.status(404).json({
                 success: false,
                 message: 'Request not found'
             });
         }
 
+        await Maintenance.delete(req.params.id);
+
         // Check if room has other maintenance requests
-        if (request.length > 0) {
-            const [otherRequests] = await connection.execute(
-                'SELECT COUNT(*) as count FROM maintenance WHERE room_id = ? AND status IN ("open", "assigned", "in_progress")',
-                [request[0].room_id]
+        const allRequests = await Maintenance.findAll();
+        const hasOpen = allRequests.some(r => 
+            r.room_id === existing.room_id && 
+            ['open', 'assigned', 'in_progress'].includes(r.status)
+        );
+
+        if (!hasOpen) {
+            await pool.execute(
+                'UPDATE rooms SET status = ? WHERE id = ?',
+                ['available', existing.room_id]
             );
-
-            if (otherRequests[0].count === 0) {
-                await connection.execute(
-                    'UPDATE rooms SET status = ? WHERE id = ?',
-                    ['available', request[0].room_id]
-                );
-            }
         }
-
-        await connection.commit();
 
         res.json({
             success: true,
             message: 'Request deleted successfully'
         });
     } catch (error) {
-        await connection.rollback();
         console.error('Error deleting maintenance request:', error);
         res.status(500).json({
             success: false,
             message: 'Error deleting maintenance request'
         });
-    } finally {
-        connection.release();
+    }
+});
+
+// ============================================
+// ✅ NEW - Direct status update endpoint
+// ============================================
+router.patch('/:id/status', verifyToken, async (req, res) => {
+    try {
+        const { status } = req.body;
+        console.log(`📥 PATCH /maintenance/${req.params.id}/status to: ${status}`);
+
+        if (!status) {
+            return res.status(400).json({
+                success: false,
+                message: 'Status is required'
+            });
+        }
+
+        const existing = await Maintenance.findById(req.params.id);
+        if (!existing) {
+            return res.status(404).json({
+                success: false,
+                message: 'Request not found'
+            });
+        }
+
+        // Update status
+        await Maintenance.updateStatus(req.params.id, status);
+
+        // Update room status if needed
+        if (status === 'completed' || status === 'cancelled') {
+            const allRequests = await Maintenance.findAll();
+            const hasOpen = allRequests.some(r => 
+                r.room_id === existing.room_id && 
+                r.id !== parseInt(req.params.id) &&
+                ['open', 'assigned', 'in_progress'].includes(r.status)
+            );
+
+            if (!hasOpen) {
+                await pool.execute(
+                    'UPDATE rooms SET status = ? WHERE id = ?',
+                    ['available', existing.room_id]
+                );
+            }
+        } else if (status === 'assigned' || status === 'in_progress') {
+            await pool.execute(
+                'UPDATE rooms SET status = ? WHERE id = ?',
+                ['maintenance', existing.room_id]
+            );
+        }
+
+        const updated = await Maintenance.findById(req.params.id);
+
+        res.json({
+            success: true,
+            message: 'Status updated successfully',
+            data: updated
+        });
+    } catch (error) {
+        console.error('❌ Error updating status:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error updating status',
+            error: error.message
+        });
     }
 });
 

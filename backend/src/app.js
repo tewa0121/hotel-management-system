@@ -16,6 +16,9 @@ const paymentRoutes = require('./routes/paymentRoutes');
 const housekeepingRoutes = require('./routes/housekeepingRoutes');
 const maintenanceRoutes = require('./routes/maintenanceRoutes');
 const reportRoutes = require('./routes/reportRoutes');
+const invoiceRoutes = require('./routes/invoiceRoutes');
+const dashboardRoutes = require('./routes/dashboardRoutes');
+const settingsRoutes = require('./routes/settingsRoutes'); // Added this
 
 const app = express();
 
@@ -49,6 +52,9 @@ app.use('/api/payments', paymentRoutes);
 app.use('/api/housekeeping', housekeepingRoutes);
 app.use('/api/maintenance', maintenanceRoutes);
 app.use('/api/reports', reportRoutes);
+app.use('/api/invoices', invoiceRoutes);
+app.use('/api/dashboard', dashboardRoutes);
+app.use('/api/settings', settingsRoutes); // Added this
 
 // Error handling middleware
 app.use(errorHandler);

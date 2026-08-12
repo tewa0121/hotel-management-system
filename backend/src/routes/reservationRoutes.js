@@ -1,68 +1,32 @@
 const express = require('express');
-const { pool } = require('../config/db');
+const { pool } = require('../config/database');
 const { verifyToken, authorize } = require('../middleware/auth');
+const Reservation = require('../models/Reservation');
+const Room = require('../models/Room');
+const Guest = require('../models/Guest');
 
 const router = express.Router();
 
-// Generate reservation number
-const generateReservationNumber = () => {
-    const date = new Date();
-    const year = date.getFullYear().toString().slice(-2);
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const day = String(date.getDate()).padStart(2, '0');
-    const random = String(Math.floor(Math.random() * 10000)).padStart(4, '0');
-    return `RES-${year}${month}${day}-${random}`;
-};
-
-// Get all reservations
+// ============================================
+// GET all reservations
+// ============================================
 router.get('/', verifyToken, async (req, res) => {
     try {
         const page = parseInt(req.query.page) || 1;
         const limit = parseInt(req.query.limit) || 20;
-        const offset = (page - 1) * limit;
         const status = req.query.status || '';
         const date = req.query.date || '';
 
-        let query = `
-            SELECT r.*, 
-                   g.first_name, g.last_name, g.email, g.phone,
-                   rm.room_number, rm.status as room_status,
-                   rt.name as room_type_name
-            FROM reservations r
-            LEFT JOIN guests g ON r.guest_id = g.id
-            LEFT JOIN rooms rm ON r.room_id = rm.id
-            LEFT JOIN room_types rt ON rm.room_type_id = rt.id
-            WHERE 1=1
-        `;
-        let countQuery = 'SELECT COUNT(*) as total FROM reservations WHERE 1=1';
-        const params = [];
-
-        if (status) {
-            query += ' AND r.reservation_status = ?';
-            countQuery += ' AND reservation_status = ?';
-            params.push(status);
-        }
-
-        if (date) {
-            query += ' AND (r.check_in_date = ? OR r.check_out_date = ?)';
-            countQuery += ' AND (check_in_date = ? OR check_out_date = ?)';
-            params.push(date, date);
-        }
-
-        query += ' ORDER BY r.created_at DESC LIMIT ? OFFSET ?';
-        params.push(limit, offset);
-
-        const [reservations] = await pool.execute(query, params);
-        const [countResult] = await pool.execute(countQuery, params.slice(0, params.length - 2));
+        const result = await Reservation.findAll(page, limit, status, date);
 
         res.json({
             success: true,
-            data: reservations,
+            data: result.data,
             pagination: {
                 page,
                 limit,
-                total: countResult[0].total,
-                totalPages: Math.ceil(countResult[0].total / limit)
+                total: result.total,
+                totalPages: Math.ceil(result.total / limit)
             }
         });
     } catch (error) {
@@ -74,7 +38,9 @@ router.get('/', verifyToken, async (req, res) => {
     }
 });
 
-// Get available rooms for a date range
+// ============================================
+// POST check available rooms
+// ============================================
 router.post('/available-rooms', verifyToken, async (req, res) => {
     try {
         const { check_in_date, check_out_date, room_type_id, guests } = req.body;
@@ -86,42 +52,12 @@ router.post('/available-rooms', verifyToken, async (req, res) => {
             });
         }
 
-        let query = `
-            SELECT r.*, rt.name as room_type_name, rt.base_price, rt.max_occupancy
-            FROM rooms r
-            LEFT JOIN room_types rt ON r.room_type_id = rt.id
-            WHERE r.is_active = TRUE
-            AND r.status NOT IN ('maintenance', 'out_of_service')
-            AND r.id NOT IN (
-                SELECT room_id FROM reservations 
-                WHERE reservation_status IN ('confirmed', 'checked_in')
-                AND (
-                    (check_in_date <= ? AND check_out_date > ?) OR
-                    (check_in_date < ? AND check_out_date >= ?) OR
-                    (check_in_date >= ? AND check_out_date <= ?)
-                )
-            )
-        `;
-
-        const params = [
-            check_out_date, check_in_date,
-            check_out_date, check_in_date,
-            check_in_date, check_out_date
-        ];
-
-        if (room_type_id) {
-            query += ' AND r.room_type_id = ?';
-            params.push(room_type_id);
-        }
-
-        if (guests) {
-            query += ' AND rt.max_occupancy >= ?';
-            params.push(guests);
-        }
-
-        query += ' ORDER BY r.room_number';
-
-        const [rooms] = await pool.execute(query, params);
+        const rooms = await Room.getAvailableRooms(
+            check_in_date,
+            check_out_date,
+            room_type_id,
+            guests
+        );
 
         res.json({
             success: true,
@@ -136,109 +72,71 @@ router.post('/available-rooms', verifyToken, async (req, res) => {
     }
 });
 
-// Create reservation
+// ============================================
+// POST create reservation
+// ============================================
 router.post('/', verifyToken, async (req, res) => {
     const connection = await pool.getConnection();
     try {
         await connection.beginTransaction();
 
         const {
+            guest_id, room_id, check_in_date, check_out_date,
+            adults, children, rate, discount, tax, total_amount,
+            deposit_paid, source, special_requests, notes
+        } = req.body;
+
+        if (!guest_id || !room_id || !check_in_date || !check_out_date) {
+            return res.status(400).json({
+                success: false,
+                message: 'Guest ID, Room ID, Check-in, and Check-out dates are required'
+            });
+        }
+
+        const availableRooms = await Room.getAvailableRooms(check_in_date, check_out_date);
+        const roomAvailable = availableRooms.find(r => r.id === parseInt(room_id));
+
+        if (!roomAvailable) {
+            await connection.rollback();
+            return res.status(400).json({
+                success: false,
+                message: 'Room is not available for selected dates'
+            });
+        }
+
+        const reservation_number = await Reservation.generateReservationNumber();
+        const balance = (total_amount || 0) - (deposit_paid || 0);
+        const payment_status = deposit_paid > 0 ? (deposit_paid >= total_amount ? 'paid' : 'partial') : 'pending';
+        const reservation_status = deposit_paid > 0 ? 'confirmed' : 'pending';
+
+        const reservationData = {
+            reservation_number,
             guest_id,
             room_id,
             check_in_date,
             check_out_date,
-            adults,
-            children,
-            rate,
-            discount,
-            tax,
-            total_amount,
-            deposit_paid,
-            source,
-            special_requests,
-            notes
-        } = req.body;
+            adults: adults || 1,
+            children: children || 0,
+            rate: rate || 0,
+            discount: discount || 0,
+            tax: tax || 0,
+            total_amount: total_amount || 0,
+            deposit_paid: deposit_paid || 0,
+            balance,
+            payment_status,
+            source: source || 'direct',
+            special_requests: special_requests || null,
+            notes: notes || null,
+            reservation_status
+        };
 
-        // Validate required fields
-        if (!guest_id || !room_id || !check_in_date || !check_out_date || !rate) {
-            return res.status(400).json({
-                success: false,
-                message: 'Missing required fields'
-            });
-        }
+        const reservation = await Reservation.create(reservationData);
 
-        // Check if room is available
-        const [roomCheck] = await connection.execute(
-            `SELECT id, status FROM rooms WHERE id = ? AND is_active = TRUE`,
-            [room_id]
-        );
-
-        if (roomCheck.length === 0) {
-            await connection.rollback();
-            return res.status(400).json({
-                success: false,
-                message: 'Room not found or inactive'
-            });
-        }
-
-        if (roomCheck[0].status === 'maintenance' || roomCheck[0].status === 'out_of_service') {
-            await connection.rollback();
-            return res.status(400).json({
-                success: false,
-                message: 'Room is not available'
-            });
-        }
-
-        // Check for overlapping reservations
-        const [overlap] = await connection.execute(
-            `SELECT COUNT(*) as count FROM reservations 
-             WHERE room_id = ? 
-             AND reservation_status IN ('confirmed', 'checked_in')
-             AND (
-                 (check_in_date <= ? AND check_out_date > ?) OR
-                 (check_in_date < ? AND check_out_date >= ?) OR
-                 (check_in_date >= ? AND check_out_date <= ?)
-             )`,
-            [room_id, check_out_date, check_in_date, check_out_date, check_in_date, check_in_date, check_out_date]
-        );
-
-        if (overlap[0].count > 0) {
-            await connection.rollback();
-            return res.status(400).json({
-                success: false,
-                message: 'Room is already booked for these dates'
-            });
-        }
-
-        // Generate reservation number
-        const reservation_number = generateReservationNumber();
-        const balance = total_amount - (deposit_paid || 0);
-
-        // Create reservation
-        const [result] = await connection.execute(
-            `INSERT INTO reservations (
-                reservation_number, guest_id, room_id, check_in_date, check_out_date,
-                adults, children, rate, discount, tax, total_amount,
-                deposit_paid, balance, payment_status, source,
-                special_requests, notes, reservation_status
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            [
-                reservation_number, guest_id, room_id, check_in_date, check_out_date,
-                adults || 1, children || 0, rate, discount || 0, tax || 0, total_amount,
-                deposit_paid || 0, balance,
-                deposit_paid > 0 ? (deposit_paid >= total_amount ? 'paid' : 'partial') : 'pending',
-                source || 'direct', special_requests || null, notes || null,
-                deposit_paid > 0 ? 'confirmed' : 'pending'
-            ]
-        );
-
-        // Update room status
         await connection.execute(
             'UPDATE rooms SET status = ? WHERE id = ?',
             ['reserved', room_id]
         );
 
-        // Update guest total stays
         await connection.execute(
             'UPDATE guests SET total_stays = total_stays + 1 WHERE id = ?',
             [guest_id]
@@ -246,18 +144,10 @@ router.post('/', verifyToken, async (req, res) => {
 
         await connection.commit();
 
-        const [newReservation] = await connection.execute(`
-            SELECT r.*, g.first_name, g.last_name, rm.room_number
-            FROM reservations r
-            LEFT JOIN guests g ON r.guest_id = g.id
-            LEFT JOIN rooms rm ON r.room_id = rm.id
-            WHERE r.id = ?
-        `, [result.insertId]);
-
         res.status(201).json({
             success: true,
             message: 'Reservation created successfully',
-            data: newReservation[0]
+            data: reservation
         });
     } catch (error) {
         await connection.rollback();
@@ -271,10 +161,125 @@ router.post('/', verifyToken, async (req, res) => {
     }
 });
 
-// Get single reservation
+// ============================================
+// GET single reservation
+// ============================================
 router.get('/:id', verifyToken, async (req, res) => {
     try {
-        const [reservations] = await pool.execute(`
+        const reservation = await Reservation.findById(req.params.id);
+        if (!reservation) {
+            return res.status(404).json({
+                success: false,
+                message: 'Reservation not found'
+            });
+        }
+        res.json({
+            success: true,
+            data: reservation
+        });
+    } catch (error) {
+        console.error('Error fetching reservation:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error fetching reservation'
+        });
+    }
+});
+
+// ============================================
+// PUT update reservation
+// ============================================
+router.put('/:id', verifyToken, async (req, res) => {
+    const connection = await pool.getConnection();
+    try {
+        await connection.beginTransaction();
+
+        const [existing] = await connection.execute(
+            'SELECT * FROM reservations WHERE id = ?',
+            [req.params.id]
+        );
+
+        if (existing.length === 0) {
+            await connection.rollback();
+            return res.status(404).json({
+                success: false,
+                message: 'Reservation not found'
+            });
+        }
+
+        const reservation = existing[0];
+
+        const {
+            guest_id, room_id, check_in_date, check_out_date,
+            adults, children, rate, discount, tax, total_amount,
+            deposit_paid, source, special_requests, notes,
+            reservation_status
+        } = req.body;
+
+        const finalGuestId = guest_id || reservation.guest_id;
+        const finalRoomId = room_id || reservation.room_id;
+        const finalCheckIn = check_in_date || reservation.check_in_date;
+        const finalCheckOut = check_out_date || reservation.check_out_date;
+        const finalAdults = adults || reservation.adults;
+        const finalChildren = children || reservation.children;
+        const finalRate = rate || reservation.rate;
+        const finalDiscount = discount || reservation.discount;
+        const finalTax = tax || reservation.tax;
+        const finalTotal = total_amount || reservation.total_amount;
+        const finalDeposit = deposit_paid || reservation.deposit_paid;
+        const finalSource = source || reservation.source;
+        const finalSpecialRequests = special_requests || reservation.special_requests;
+        const finalNotes = notes || reservation.notes;
+        const finalStatus = reservation_status || reservation.reservation_status;
+
+        const balance = finalTotal - finalDeposit;
+        const paymentStatus = finalDeposit >= finalTotal ? 'paid' : 
+                             (finalDeposit > 0 ? 'partial' : 'pending');
+
+        await connection.execute(
+            `UPDATE reservations SET
+                guest_id = ?,
+                room_id = ?,
+                check_in_date = ?,
+                check_out_date = ?,
+                adults = ?,
+                children = ?,
+                rate = ?,
+                discount = ?,
+                tax = ?,
+                total_amount = ?,
+                deposit_paid = ?,
+                balance = ?,
+                payment_status = ?,
+                source = ?,
+                special_requests = ?,
+                notes = ?,
+                reservation_status = ?,
+                updated_at = NOW()
+            WHERE id = ?`,
+            [
+                finalGuestId, finalRoomId, finalCheckIn, finalCheckOut,
+                finalAdults, finalChildren, finalRate, finalDiscount || 0,
+                finalTax || 0, finalTotal, finalDeposit || 0, balance,
+                paymentStatus, finalSource, finalSpecialRequests || null,
+                finalNotes || null, finalStatus, req.params.id
+            ]
+        );
+
+        if (room_id && room_id !== reservation.room_id) {
+            await connection.execute(
+                'UPDATE rooms SET status = ? WHERE id = ?',
+                ['available', reservation.room_id]
+            );
+            await connection.execute(
+                'UPDATE rooms SET status = ? WHERE id = ?',
+                ['reserved', room_id]
+            );
+        }
+
+        await connection.commit();
+
+        const [updated] = await connection.execute(`
             SELECT r.*, 
                    g.first_name, g.last_name, g.email, g.phone,
                    rm.room_number, rm.status as room_status,
@@ -286,96 +291,10 @@ router.get('/:id', verifyToken, async (req, res) => {
             WHERE r.id = ?
         `, [req.params.id]);
 
-        if (reservations.length === 0) {
-            return res.status(404).json({
-                success: false,
-                message: 'Reservation not found'
-            });
-        }
-
-        res.json({
-            success: true,
-            data: reservations[0]
-        });
-    } catch (error) {
-        console.error('Error fetching reservation:', error);
-        res.status(500).json({
-            success: false,
-            message: 'Error fetching reservation'
-        });
-    }
-});
-
-// Update reservation
-router.put('/:id', verifyToken, async (req, res) => {
-    const connection = await pool.getConnection();
-    try {
-        await connection.beginTransaction();
-
-        const {
-            check_in_date,
-            check_out_date,
-            adults,
-            children,
-            rate,
-            discount,
-            tax,
-            total_amount,
-            deposit_paid,
-            source,
-            special_requests,
-            notes,
-            reservation_status
-        } = req.body;
-
-        const [result] = await connection.execute(
-            `UPDATE reservations SET
-                check_in_date = ?,
-                check_out_date = ?,
-                adults = ?,
-                children = ?,
-                rate = ?,
-                discount = ?,
-                tax = ?,
-                total_amount = ?,
-                deposit_paid = ?,
-                balance = ?,
-                source = ?,
-                special_requests = ?,
-                notes = ?,
-                reservation_status = ?
-            WHERE id = ?`,
-            [
-                check_in_date, check_out_date, adults || 1, children || 0,
-                rate, discount || 0, tax || 0, total_amount,
-                deposit_paid || 0, total_amount - (deposit_paid || 0),
-                source || 'direct', special_requests || null,
-                notes || null, reservation_status, req.params.id
-            ]
-        );
-
-        if (result.affectedRows === 0) {
-            await connection.rollback();
-            return res.status(404).json({
-                success: false,
-                message: 'Reservation not found'
-            });
-        }
-
-        await connection.commit();
-
-        const [updatedReservation] = await connection.execute(`
-            SELECT r.*, g.first_name, g.last_name, rm.room_number
-            FROM reservations r
-            LEFT JOIN guests g ON r.guest_id = g.id
-            LEFT JOIN rooms rm ON r.room_id = rm.id
-            WHERE r.id = ?
-        `, [req.params.id]);
-
         res.json({
             success: true,
             message: 'Reservation updated successfully',
-            data: updatedReservation[0]
+            data: updated[0]
         });
     } catch (error) {
         await connection.rollback();
@@ -389,18 +308,16 @@ router.put('/:id', verifyToken, async (req, res) => {
     }
 });
 
-// Cancel reservation
+// ============================================
+// POST cancel reservation
+// ============================================
 router.post('/:id/cancel', verifyToken, async (req, res) => {
     const connection = await pool.getConnection();
     try {
         await connection.beginTransaction();
 
-        const [reservation] = await connection.execute(
-            'SELECT room_id, reservation_status FROM reservations WHERE id = ?',
-            [req.params.id]
-        );
-
-        if (reservation.length === 0) {
+        const reservation = await Reservation.findById(req.params.id);
+        if (!reservation) {
             await connection.rollback();
             return res.status(404).json({
                 success: false,
@@ -408,7 +325,7 @@ router.post('/:id/cancel', verifyToken, async (req, res) => {
             });
         }
 
-        if (reservation[0].reservation_status === 'checked_in') {
+        if (reservation.reservation_status === 'checked_in') {
             await connection.rollback();
             return res.status(400).json({
                 success: false,
@@ -416,15 +333,11 @@ router.post('/:id/cancel', verifyToken, async (req, res) => {
             });
         }
 
-        await connection.execute(
-            'UPDATE reservations SET reservation_status = ? WHERE id = ?',
-            ['cancelled', req.params.id]
-        );
+        await Reservation.cancel(req.params.id);
 
-        // Update room status back to available
         await connection.execute(
             'UPDATE rooms SET status = ? WHERE id = ?',
-            ['available', reservation[0].room_id]
+            ['available', reservation.room_id]
         );
 
         await connection.commit();
@@ -445,18 +358,18 @@ router.post('/:id/cancel', verifyToken, async (req, res) => {
     }
 });
 
-// Check-in
+// ============================================
+// POST check-in
+// ============================================
 router.post('/:id/check-in', verifyToken, authorize('admin', 'manager', 'receptionist'), async (req, res) => {
     const connection = await pool.getConnection();
     try {
         await connection.beginTransaction();
 
-        const [reservation] = await connection.execute(
-            'SELECT room_id, reservation_status FROM reservations WHERE id = ?',
-            [req.params.id]
-        );
+        console.log(`📤 CHECK-IN request for reservation ${req.params.id}`);
 
-        if (reservation.length === 0) {
+        const reservation = await Reservation.findById(req.params.id);
+        if (!reservation) {
             await connection.rollback();
             return res.status(404).json({
                 success: false,
@@ -464,7 +377,7 @@ router.post('/:id/check-in', verifyToken, authorize('admin', 'manager', 'recepti
             });
         }
 
-        if (reservation[0].reservation_status === 'checked_in') {
+        if (reservation.reservation_status === 'checked_in') {
             await connection.rollback();
             return res.status(400).json({
                 success: false,
@@ -472,7 +385,7 @@ router.post('/:id/check-in', verifyToken, authorize('admin', 'manager', 'recepti
             });
         }
 
-        if (reservation[0].reservation_status === 'cancelled') {
+        if (reservation.reservation_status === 'cancelled') {
             await connection.rollback();
             return res.status(400).json({
                 success: false,
@@ -480,17 +393,19 @@ router.post('/:id/check-in', verifyToken, authorize('admin', 'manager', 'recepti
             });
         }
 
-        await connection.execute(
-            `UPDATE reservations SET 
-                reservation_status = ?,
-                checked_in_at = NOW()
-            WHERE id = ?`,
-            ['checked_in', req.params.id]
-        );
+        if (reservation.reservation_status !== 'confirmed' && reservation.reservation_status !== 'pending') {
+            await connection.rollback();
+            return res.status(400).json({
+                success: false,
+                message: 'Reservation must be confirmed or pending to check in'
+            });
+        }
+
+        await Reservation.checkIn(req.params.id);
 
         await connection.execute(
             'UPDATE rooms SET status = ? WHERE id = ?',
-            ['occupied', reservation[0].room_id]
+            ['occupied', reservation.room_id]
         );
 
         await connection.commit();
@@ -511,18 +426,18 @@ router.post('/:id/check-in', verifyToken, authorize('admin', 'manager', 'recepti
     }
 });
 
-// Check-out
+// ============================================
+// POST check-out
+// ============================================
 router.post('/:id/check-out', verifyToken, authorize('admin', 'manager', 'receptionist'), async (req, res) => {
     const connection = await pool.getConnection();
     try {
         await connection.beginTransaction();
 
-        const [reservation] = await connection.execute(
-            'SELECT room_id, reservation_status FROM reservations WHERE id = ?',
-            [req.params.id]
-        );
+        console.log(`📤 CHECK-OUT request for reservation ${req.params.id}`);
 
-        if (reservation.length === 0) {
+        const reservation = await Reservation.findById(req.params.id);
+        if (!reservation) {
             await connection.rollback();
             return res.status(404).json({
                 success: false,
@@ -530,7 +445,7 @@ router.post('/:id/check-out', verifyToken, authorize('admin', 'manager', 'recept
             });
         }
 
-        if (reservation[0].reservation_status !== 'checked_in') {
+        if (reservation.reservation_status !== 'checked_in') {
             await connection.rollback();
             return res.status(400).json({
                 success: false,
@@ -538,25 +453,17 @@ router.post('/:id/check-out', verifyToken, authorize('admin', 'manager', 'recept
             });
         }
 
-        await connection.execute(
-            `UPDATE reservations SET 
-                reservation_status = ?,
-                checked_out_at = NOW()
-            WHERE id = ?`,
-            ['checked_out', req.params.id]
-        );
+        await Reservation.checkOut(req.params.id);
 
-        // Update room to dirty for housekeeping
         await connection.execute(
             'UPDATE rooms SET status = ?, housekeeping_status = ? WHERE id = ?',
-            ['dirty', 'dirty', reservation[0].room_id]
+            ['dirty', 'dirty', reservation.room_id]
         );
 
-        // Create housekeeping task automatically
         await connection.execute(
             `INSERT INTO housekeeping (room_id, status, priority, created_by)
              VALUES (?, ?, ?, ?)`,
-            [reservation[0].room_id, 'pending', 'normal', req.user.id]
+            [reservation.room_id, 'pending', 'normal', req.user.id]
         );
 
         await connection.commit();

@@ -4,10 +4,13 @@ const roomService = {
   // Get all rooms
   async getRooms() {
     try {
+      console.log('📡 Calling GET /rooms');
       const response = await api.get('/rooms');
+      console.log('📥 Response:', response.data);
       return response.data;
     } catch (error) {
-      throw error.response?.data || error.message;
+      console.error('❌ getRooms error:', error);
+      throw error;
     }
   },
 
@@ -24,9 +27,12 @@ const roomService = {
   // Get room types
   async getRoomTypes() {
     try {
+      console.log('📡 Calling GET /rooms/types/all');
       const response = await api.get('/rooms/types/all');
+      console.log('📥 Room types:', response.data);
       return response.data;
     } catch (error) {
+      console.error('❌ getRoomTypes error:', error);
       throw error.response?.data || error.message;
     }
   },
@@ -44,10 +50,13 @@ const roomService = {
   // Create room
   async createRoom(roomData) {
     try {
+      console.log('📡 Calling POST /rooms with:', roomData);
       const response = await api.post('/rooms', roomData);
+      console.log('📥 Create response:', response.data);
       return response.data;
     } catch (error) {
-      throw error.response?.data || error.message;
+      console.error('❌ createRoom error:', error);
+      throw error;
     }
   },
 

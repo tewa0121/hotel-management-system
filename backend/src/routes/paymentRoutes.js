@@ -1,15 +1,16 @@
 const express = require('express');
-const { pool } = require('../config/db');
+const { pool } = require('../config/database');
 const { verifyToken, authorize } = require('../middleware/auth');
 
 const router = express.Router();
 
-// Get all payments
+// ============================================
+// GET all payments
+// ============================================
 router.get('/', verifyToken, async (req, res) => {
     try {
         const page = parseInt(req.query.page) || 1;
         const limit = parseInt(req.query.limit) || 20;
-        const offset = (page - 1) * limit;
         const status = req.query.status || '';
 
         let query = `
@@ -33,7 +34,7 @@ router.get('/', verifyToken, async (req, res) => {
         }
 
         query += ' ORDER BY p.created_at DESC LIMIT ? OFFSET ?';
-        params.push(limit, offset);
+        params.push(limit, (page - 1) * limit);
 
         const [payments] = await pool.execute(query, params);
         const [countResult] = await pool.execute(countQuery, params.slice(0, params.length - 2));
@@ -57,7 +58,9 @@ router.get('/', verifyToken, async (req, res) => {
     }
 });
 
-// Get payments by reservation
+// ============================================
+// GET payments by reservation
+// ============================================
 router.get('/reservation/:reservationId', verifyToken, async (req, res) => {
     try {
         const [payments] = await pool.execute(
@@ -82,11 +85,15 @@ router.get('/reservation/:reservationId', verifyToken, async (req, res) => {
     }
 });
 
-// Create payment
+// ============================================
+// POST create payment
+// ============================================
 router.post('/', verifyToken, authorize('admin', 'manager', 'receptionist', 'accountant'), async (req, res) => {
     const connection = await pool.getConnection();
     try {
         await connection.beginTransaction();
+
+        console.log('📤 Payment request:', req.body);
 
         const {
             reservation_id,
@@ -99,17 +106,42 @@ router.post('/', verifyToken, authorize('admin', 'manager', 'receptionist', 'acc
             notes
         } = req.body;
 
-        // Validate required fields
-        if (!reservation_id || !guest_id || !amount || !payment_method) {
+        // ✅ Validate required fields
+        if (!reservation_id) {
+            await connection.rollback();
             return res.status(400).json({
                 success: false,
-                message: 'Reservation ID, Guest ID, Amount, and Payment Method are required'
+                message: 'Reservation ID is required'
             });
         }
 
-        // Get reservation details
+        if (!guest_id) {
+            await connection.rollback();
+            return res.status(400).json({
+                success: false,
+                message: 'Guest ID is required'
+            });
+        }
+
+        if (!amount || parseFloat(amount) <= 0) {
+            await connection.rollback();
+            return res.status(400).json({
+                success: false,
+                message: 'Valid amount is required'
+            });
+        }
+
+        if (!payment_method) {
+            await connection.rollback();
+            return res.status(400).json({
+                success: false,
+                message: 'Payment method is required'
+            });
+        }
+
+        // ✅ Check if reservation exists
         const [reservation] = await connection.execute(
-            'SELECT total_amount, deposit_paid, balance, payment_status FROM reservations WHERE id = ?',
+            'SELECT total_amount, deposit_paid, balance, payment_status, guest_id FROM reservations WHERE id = ?',
             [reservation_id]
         );
 
@@ -121,50 +153,87 @@ router.post('/', verifyToken, authorize('admin', 'manager', 'receptionist', 'acc
             });
         }
 
-        const currentBalance = reservation[0].balance;
-        const newDepositPaid = reservation[0].deposit_paid + amount;
-        const newBalance = currentBalance - amount;
-        let newPaymentStatus = 'partial';
-
-        if (newBalance <= 0) {
-            newPaymentStatus = 'paid';
-        } else if (newDepositPaid > 0) {
-            newPaymentStatus = 'partial';
-        } else {
-            newPaymentStatus = 'pending';
+        // ✅ Verify guest matches reservation
+        if (reservation[0].guest_id !== parseInt(guest_id)) {
+            await connection.rollback();
+            return res.status(400).json({
+                success: false,
+                message: 'Guest does not match this reservation'
+            });
         }
 
-        // Insert payment
+        const currentBalance = parseFloat(reservation[0].balance) || 0;
+        const depositPaid = parseFloat(reservation[0].deposit_paid) || 0;
+        const totalAmount = parseFloat(reservation[0].total_amount) || 0;
+        const paymentAmount = parseFloat(amount);
+
+        // ✅ Calculate new values
+        const newDepositPaid = depositPaid + paymentAmount;
+        const newBalance = currentBalance - paymentAmount;
+        let paymentStatus = 'pending';
+        
+        if (newBalance <= 0) {
+            paymentStatus = 'paid';
+        } else if (newDepositPaid > 0) {
+            paymentStatus = 'partial';
+        }
+
+        console.log('📊 Payment calculation:', {
+            currentBalance,
+            depositPaid,
+            totalAmount,
+            paymentAmount,
+            newDepositPaid,
+            newBalance,
+            paymentStatus
+        });
+
+        // ✅ Insert payment
         const [result] = await connection.execute(
             `INSERT INTO payments (
                 reservation_id, guest_id, amount, currency, payment_method,
                 reference_number, status, received_by, notes
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [
-                reservation_id, guest_id, amount, currency || 'USD',
-                payment_method, reference_number || null,
-                status || 'completed', req.user.id, notes || null
+                reservation_id,
+                guest_id,
+                paymentAmount,
+                currency || 'USD',
+                payment_method,
+                reference_number || null,
+                status || 'completed',
+                req.user.id,
+                notes || null
             ]
         );
 
-        // Update reservation payment status
+        // ✅ Update reservation
         await connection.execute(
             `UPDATE reservations SET
                 deposit_paid = ?,
                 balance = ?,
                 payment_status = ?
             WHERE id = ?`,
-            [newDepositPaid, newBalance, newPaymentStatus, reservation_id]
+            [newDepositPaid, newBalance, paymentStatus, reservation_id]
+        );
+
+        // ✅ Update guest spending
+        await connection.execute(
+            'UPDATE guests SET total_spent = total_spent + ? WHERE id = ?',
+            [paymentAmount, guest_id]
         );
 
         await connection.commit();
 
+        // ✅ Get the created payment
         const [newPayment] = await connection.execute(`
             SELECT p.*, u.name as received_by_name
             FROM payments p
             LEFT JOIN users u ON p.received_by = u.id
             WHERE p.id = ?
         `, [result.insertId]);
+
+        console.log('✅ Payment created:', newPayment[0]);
 
         res.status(201).json({
             success: true,
@@ -173,17 +242,23 @@ router.post('/', verifyToken, authorize('admin', 'manager', 'receptionist', 'acc
         });
     } catch (error) {
         await connection.rollback();
-        console.error('Error creating payment:', error);
+        console.error('❌ Payment error:', error);
+        console.error('❌ Error details:', error.message);
+        
         res.status(500).json({
             success: false,
-            message: 'Error recording payment'
+            message: 'Error recording payment',
+            error: error.message,
+            stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
         });
     } finally {
         connection.release();
     }
 });
 
-// Get single payment
+// ============================================
+// GET single payment
+// ============================================
 router.get('/:id', verifyToken, async (req, res) => {
     try {
         const [payments] = await pool.execute(`
@@ -218,28 +293,40 @@ router.get('/:id', verifyToken, async (req, res) => {
     }
 });
 
-// Refund payment
+// ============================================
+// ✅ COMPLETELY FIXED: POST refund payment
+// ============================================
 router.post('/:id/refund', verifyToken, authorize('admin', 'manager', 'accountant'), async (req, res) => {
     const connection = await pool.getConnection();
     try {
         await connection.beginTransaction();
 
+        const paymentId = req.params.id;
         const { reason } = req.body;
 
+        console.log('=========================================');
+        console.log(`📤 REFUNDING PAYMENT ${paymentId}`);
+        console.log('📤 Reason:', reason || 'No reason provided');
+
+        // ✅ Check if payment exists
         const [payment] = await connection.execute(
-            'SELECT reservation_id, guest_id, amount, status FROM payments WHERE id = ?',
-            [req.params.id]
+            'SELECT * FROM payments WHERE id = ?',
+            [paymentId]
         );
 
         if (payment.length === 0) {
             await connection.rollback();
             return res.status(404).json({
                 success: false,
-                message: 'Payment not found'
+                message: `Payment with ID ${paymentId} not found`
             });
         }
 
-        if (payment[0].status === 'refunded') {
+        const paymentData = payment[0];
+        console.log('📊 Payment:', paymentData);
+
+        // ✅ Check if already refunded
+        if (paymentData.status === 'refunded') {
             await connection.rollback();
             return res.status(400).json({
                 success: false,
@@ -247,38 +334,96 @@ router.post('/:id/refund', verifyToken, authorize('admin', 'manager', 'accountan
             });
         }
 
-        // Update payment status
-        await connection.execute(
-            'UPDATE payments SET status = ?, notes = CONCAT(notes, ?) WHERE id = ?',
-            ['refunded', ` Refunded: ${reason || 'No reason provided'}`, req.params.id]
-        );
-
-        // Update reservation balance
-        const [reservation] = await connection.execute(
-            'SELECT deposit_paid, balance, total_amount FROM reservations WHERE id = ?',
-            [payment[0].reservation_id]
-        );
-
-        const newDepositPaid = reservation[0].deposit_paid - payment[0].amount;
-        const newBalance = reservation[0].balance + payment[0].amount;
-        let newPaymentStatus = 'pending';
-
-        if (newDepositPaid >= reservation[0].total_amount) {
-            newPaymentStatus = 'paid';
-        } else if (newDepositPaid > 0) {
-            newPaymentStatus = 'partial';
+        // ✅ Check if payment is completed
+        if (paymentData.status !== 'completed') {
+            await connection.rollback();
+            return res.status(400).json({
+                success: false,
+                message: 'Only completed payments can be refunded'
+            });
         }
 
+        // ✅ Get reservation
+        const [reservation] = await connection.execute(
+            'SELECT * FROM reservations WHERE id = ?',
+            [paymentData.reservation_id]
+        );
+
+        if (reservation.length === 0) {
+            await connection.rollback();
+            return res.status(404).json({
+                success: false,
+                message: 'Reservation not found'
+            });
+        }
+
+        const reservationData = reservation[0];
+        console.log('📊 Reservation:', reservationData);
+
+        // ✅ Convert to numbers using parseFloat
+        const paymentAmount = parseFloat(paymentData.amount) || 0;
+        const currentDepositPaid = parseFloat(reservationData.deposit_paid) || 0;
+        const currentBalance = parseFloat(reservationData.balance) || 0;
+        const totalAmount = parseFloat(reservationData.total_amount) || 0;
+
+        console.log('📊 Values:', { 
+            paymentAmount, 
+            currentDepositPaid, 
+            currentBalance, 
+            totalAmount 
+        });
+
+        // ✅ Calculate new values
+        let newDepositPaid = currentDepositPaid - paymentAmount;
+        let newBalance = currentBalance + paymentAmount;
+        
+        // ✅ Prevent negative values
+        if (newDepositPaid < 0) {
+            console.log('⚠️ newDepositPaid was negative, setting to 0');
+            newDepositPaid = 0;
+        }
+        if (newBalance < 0) {
+            console.log('⚠️ newBalance was negative, setting to 0');
+            newBalance = 0;
+        }
+        
+        let paymentStatus = 'pending';
+        if (newDepositPaid >= totalAmount) {
+            paymentStatus = 'paid';
+        } else if (newDepositPaid > 0) {
+            paymentStatus = 'partial';
+        }
+
+        console.log('📊 New values:', { 
+            newDepositPaid, 
+            newBalance, 
+            paymentStatus 
+        });
+
+        // ✅ Update payment status
+        const refundNote = ` Refunded: ${reason || 'No reason provided'}`;
         await connection.execute(
-            `UPDATE reservations SET
+            `UPDATE payments SET 
+                status = 'refunded',
+                notes = CONCAT(IFNULL(notes, ''), ?)
+            WHERE id = ?`,
+            [refundNote, paymentId]
+        );
+
+        // ✅ Update reservation with DIRECT SQL
+        await connection.execute(
+            `UPDATE reservations SET 
                 deposit_paid = ?,
                 balance = ?,
                 payment_status = ?
             WHERE id = ?`,
-            [newDepositPaid, newBalance, newPaymentStatus, payment[0].reservation_id]
+            [newDepositPaid, newBalance, paymentStatus, paymentData.reservation_id]
         );
 
         await connection.commit();
+
+        console.log('✅✅✅ REFUND SUCCESSFUL');
+        console.log('=========================================');
 
         res.json({
             success: true,
@@ -286,10 +431,12 @@ router.post('/:id/refund', verifyToken, authorize('admin', 'manager', 'accountan
         });
     } catch (error) {
         await connection.rollback();
-        console.error('Error refunding payment:', error);
+        console.error('❌ Error refunding payment:', error);
+        console.error('❌ Error details:', error.message);
         res.status(500).json({
             success: false,
-            message: 'Error refunding payment'
+            message: 'Error refunding payment',
+            error: error.message
         });
     } finally {
         connection.release();
