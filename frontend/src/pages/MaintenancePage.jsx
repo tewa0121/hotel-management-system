@@ -29,14 +29,26 @@ const MaintenancePage = () => {
     fetchRequests();
   }, [filterStatus]);
 
+  // ✅ FIXED: fetchRequests with better error handling
   const fetchRequests = async () => {
     try {
       setLoading(true);
+      console.log('🔄 Fetching maintenance requests with status:', filterStatus);
+      
       const response = await maintenanceService.getRequests(filterStatus);
-      setRequests(response.data || []);
+      console.log('📥 Response data:', response);
+      
+      if (response && response.success) {
+        setRequests(response.data || []);
+        console.log('✅ Loaded', response.data?.length || 0, 'requests');
+      } else {
+        console.warn('⚠️ Unexpected response format:', response);
+        setRequests([]);
+      }
     } catch (error) {
+      console.error('❌ Error fetching maintenance requests:', error);
       toast.error('Failed to load maintenance requests');
-      console.error('Error:', error);
+      setRequests([]);
     } finally {
       setLoading(false);
     }
@@ -44,38 +56,28 @@ const MaintenancePage = () => {
 
   const handleDelete = async (id) => {
     if (!window.confirm('Are you sure you want to delete this maintenance request?')) return;
+    
     try {
       await maintenanceService.deleteRequest(id);
       toast.success('Request deleted successfully');
-      fetchRequests();
+      await fetchRequests();
     } catch (error) {
       toast.error('Failed to delete request');
     }
   };
 
-  // ============================================
-  // ✅ HANDLE STATUS UPDATE - FIXED
-  // ============================================
+  // ✅ FIXED: handleStatusUpdate with better error handling
   const handleStatusUpdate = async (id, newStatus) => {
     try {
       console.log(`🔄 Updating maintenance ${id} to status: ${newStatus}`);
       
-      // Find the current request
-      const currentRequest = requests.find(r => r.id === id);
-      
-      if (!currentRequest) {
-        toast.error('Request not found');
-        return;
-      }
-
-      // Use PATCH for status update (more reliable)
       const response = await maintenanceService.updateStatus(id, newStatus);
       
       if (response && response.success) {
         toast.success(`Request marked as ${newStatus.replace('_', ' ')}`);
-        await fetchRequests(); // Refresh the list
+        await fetchRequests();
       } else {
-        toast.error('Failed to update request status');
+        toast.error(response?.message || 'Failed to update request status');
         console.error('❌ Update failed:', response);
       }
     } catch (error) {
@@ -141,7 +143,7 @@ const MaintenancePage = () => {
     return actions[status] || null;
   };
 
-  // Filter requests
+  // Filter requests by search
   const filteredRequests = requests.filter(req => {
     const matchSearch = req.room_number?.includes(search) || 
                         req.description?.toLowerCase().includes(search.toLowerCase()) ||
@@ -323,7 +325,7 @@ const MaintenancePage = () => {
                       <span className="capitalize">{request.status.replace('_', ' ')}</span>
                     </span>
 
-                    {/* ✅ Quick Action Button - FIXED */}
+                    {/* Quick Action Button */}
                     {action && (
                       <button
                         onClick={() => handleStatusUpdate(request.id, action.next)}

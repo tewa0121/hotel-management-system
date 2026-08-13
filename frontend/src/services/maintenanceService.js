@@ -4,11 +4,14 @@ const maintenanceService = {
     // Get all requests
     async getRequests(status = '', priority = '') {
         try {
+            console.log('📡 Fetching maintenance requests with:', { status, priority });
             const response = await api.get('/maintenance', {
                 params: { status, priority }
             });
+            console.log('📥 Maintenance response:', response.data);
             return response.data;
         } catch (error) {
+            console.error('❌ getRequests error:', error);
             throw error.response?.data || error.message;
         }
     },
@@ -28,13 +31,15 @@ const maintenanceService = {
         try {
             console.log('📤 Creating maintenance request:', requestData);
             const response = await api.post('/maintenance', requestData);
+            console.log('📥 Create response:', response.data);
             return response.data;
         } catch (error) {
+            console.error('❌ Create error:', error);
             throw error.response?.data || error.message;
         }
     },
 
-    // Update request - FULL UPDATE
+    // Update request
     async updateRequest(id, requestData) {
         try {
             console.log(`📤 Updating maintenance ${id} with:`, requestData);
@@ -47,7 +52,7 @@ const maintenanceService = {
         }
     },
 
-    // ✅ NEW - Direct status update (PATCH)
+    // ✅ Direct status update (PATCH)
     async updateStatus(id, status) {
         try {
             console.log(`📤 Updating status for ${id} to: ${status}`);

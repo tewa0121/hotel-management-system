@@ -1,14 +1,16 @@
 const express = require('express');
-const { pool } = require('../config/db');
+const { pool } = require('../config/database');
 const { verifyToken, authorize } = require('../middleware/auth');
 
 const router = express.Router();
 
-// Get all housekeeping tasks
+// ============================================
+// GET all housekeeping tasks
+// ============================================
 router.get('/', verifyToken, async (req, res) => {
     try {
         const status = req.query.status || '';
-        const assigned_to = req.query.assigned_to || '';
+        const assignedTo = req.query.assigned_to || '';
 
         let query = `
             SELECT h.*,
@@ -28,9 +30,9 @@ router.get('/', verifyToken, async (req, res) => {
             params.push(status);
         }
 
-        if (assigned_to) {
+        if (assignedTo) {
             query += ' AND h.assigned_to = ?';
-            params.push(assigned_to);
+            params.push(assignedTo);
         }
 
         query += ' ORDER BY h.priority DESC, h.created_at DESC';
@@ -50,7 +52,9 @@ router.get('/', verifyToken, async (req, res) => {
     }
 });
 
-// Get housekeeping dashboard
+// ============================================
+// GET housekeeping dashboard
+// ============================================
 router.get('/dashboard', verifyToken, async (req, res) => {
     try {
         // Get task counts by status
@@ -79,25 +83,12 @@ router.get('/dashboard', verifyToken, async (req, res) => {
             ORDER BY r.room_number
         `);
 
-        // Get tasks assigned to current user if housekeeping role
-        let myTasks = [];
-        if (req.user.role === 'housekeeping') {
-            [myTasks] = await pool.execute(`
-                SELECT h.*, r.room_number, r.building, r.floor
-                FROM housekeeping h
-                LEFT JOIN rooms r ON h.room_id = r.id
-                WHERE h.assigned_to = ? AND h.status IN ('assigned', 'cleaning')
-                ORDER BY h.priority DESC
-            `, [req.user.id]);
-        }
-
         res.json({
             success: true,
             data: {
                 summary: statusCounts,
                 pendingTasks,
-                dirtyRooms,
-                myTasks
+                dirtyRooms
             }
         });
     } catch (error) {
@@ -109,7 +100,9 @@ router.get('/dashboard', verifyToken, async (req, res) => {
     }
 });
 
-// Create housekeeping task
+// ============================================
+// POST create housekeeping task
+// ============================================
 router.post('/', verifyToken, authorize('admin', 'manager', 'receptionist'), async (req, res) => {
     try {
         const {
@@ -166,9 +159,15 @@ router.post('/', verifyToken, authorize('admin', 'manager', 'receptionist'), asy
     }
 });
 
-// Update housekeeping task
+// ============================================
+// ✅ FIXED: PUT update housekeeping task
+// ============================================
 router.put('/:id', verifyToken, async (req, res) => {
     try {
+        const taskId = req.params.id;
+        console.log(`📤 Updating housekeeping task ${taskId}`);
+        console.log('📤 Request body:', req.body);
+
         const {
             assigned_to,
             priority,
@@ -178,41 +177,68 @@ router.put('/:id', verifyToken, async (req, res) => {
             notes
         } = req.body;
 
-        const [result] = await pool.execute(
-            `UPDATE housekeeping SET
-                assigned_to = ?,
-                priority = ?,
-                status = ?,
-                start_time = ?,
-                completion_time = ?,
-                notes = ?
-            WHERE id = ?`,
-            [
-                assigned_to, priority, status,
-                start_time || null, completion_time || null,
-                notes, req.params.id
-            ]
+        // ✅ Check if task exists
+        const [existing] = await pool.execute(
+            'SELECT room_id, status FROM housekeeping WHERE id = ?',
+            [taskId]
         );
 
-        if (result.affectedRows === 0) {
+        if (existing.length === 0) {
             return res.status(404).json({
                 success: false,
                 message: 'Task not found'
             });
         }
 
-        // Update room status if task completed
+        const oldStatus = existing[0].status;
+        const roomId = existing[0].room_id;
+
+        // ✅ Build update query dynamically
+        const updates = [];
+        const params = [];
+
+        if (assigned_to !== undefined) {
+            updates.push('assigned_to = ?');
+            params.push(assigned_to);
+        }
+        if (priority !== undefined) {
+            updates.push('priority = ?');
+            params.push(priority);
+        }
+        if (status !== undefined) {
+            updates.push('status = ?');
+            params.push(status);
+        }
+        if (start_time !== undefined) {
+            updates.push('start_time = ?');
+            params.push(start_time);
+        }
+        if (completion_time !== undefined) {
+            updates.push('completion_time = ?');
+            params.push(completion_time);
+        }
+        if (notes !== undefined) {
+            updates.push('notes = ?');
+            params.push(notes);
+        }
+
+        // Always update updated_at
+        updates.push('updated_at = NOW()');
+        
+        const query = `UPDATE housekeeping SET ${updates.join(', ')} WHERE id = ?`;
+        params.push(taskId);
+
+        console.log('📝 SQL Query:', query);
+        console.log('📊 Params:', params);
+
+        await pool.execute(query, params);
+
+        // ✅ Update room status if task completed
         if (status === 'completed' || status === 'inspected') {
-            const [task] = await pool.execute(
-                'SELECT room_id FROM housekeeping WHERE id = ?',
-                [req.params.id]
+            await pool.execute(
+                'UPDATE rooms SET housekeeping_status = ? WHERE id = ?',
+                [status === 'inspected' ? 'inspected' : 'clean', roomId]
             );
-            if (task.length > 0) {
-                await pool.execute(
-                    'UPDATE rooms SET housekeeping_status = ? WHERE id = ?',
-                    [status === 'inspected' ? 'inspected' : 'clean', task[0].room_id]
-                );
-            }
         }
 
         const [updatedTask] = await pool.execute(`
@@ -221,7 +247,9 @@ router.put('/:id', verifyToken, async (req, res) => {
             LEFT JOIN rooms r ON h.room_id = r.id
             LEFT JOIN users u ON h.assigned_to = u.id
             WHERE h.id = ?
-        `, [req.params.id]);
+        `, [taskId]);
+
+        console.log('✅ Task updated successfully');
 
         res.json({
             success: true,
@@ -229,15 +257,19 @@ router.put('/:id', verifyToken, async (req, res) => {
             data: updatedTask[0]
         });
     } catch (error) {
-        console.error('Error updating housekeeping task:', error);
+        console.error('❌ Error updating housekeeping task:', error);
+        console.error('❌ Error details:', error.message);
         res.status(500).json({
             success: false,
-            message: 'Error updating housekeeping task'
+            message: 'Error updating housekeeping task',
+            error: error.message
         });
     }
 });
 
-// Assign task to staff
+// ============================================
+// POST assign task to staff
+// ============================================
 router.post('/:id/assign', verifyToken, authorize('admin', 'manager'), async (req, res) => {
     try {
         const { assigned_to } = req.body;
@@ -261,9 +293,18 @@ router.post('/:id/assign', verifyToken, authorize('admin', 'manager'), async (re
             });
         }
 
+        const [updatedTask] = await pool.execute(`
+            SELECT h.*, r.room_number, u.name as assigned_to_name
+            FROM housekeeping h
+            LEFT JOIN rooms r ON h.room_id = r.id
+            LEFT JOIN users u ON h.assigned_to = u.id
+            WHERE h.id = ?
+        `, [req.params.id]);
+
         res.json({
             success: true,
-            message: 'Task assigned successfully'
+            message: 'Task assigned successfully',
+            data: updatedTask
         });
     } catch (error) {
         console.error('Error assigning task:', error);
@@ -274,7 +315,9 @@ router.post('/:id/assign', verifyToken, authorize('admin', 'manager'), async (re
     }
 });
 
-// Delete housekeeping task
+// ============================================
+// DELETE housekeeping task
+// ============================================
 router.delete('/:id', verifyToken, authorize('admin', 'manager'), async (req, res) => {
     try {
         const [result] = await pool.execute(

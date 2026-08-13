@@ -1,77 +1,97 @@
 import React, { useState, useEffect } from 'react';
 import toast from 'react-hot-toast';
 import { 
-  FaTools, 
-  FaPlus, 
-  FaWrench, 
-  FaClock, 
+  FaBroom, 
   FaCheckCircle, 
-  FaTimesCircle,
-  FaExclamationTriangle,
+  FaClock, 
+  FaUser, 
+  FaPlus, 
   FaSearch,
+  FaExclamationTriangle,
+  FaUserCheck,
   FaEdit,
   FaTrash,
-  FaUser,
-  FaCalendar,
   FaArrowRight
 } from 'react-icons/fa';
-import maintenanceService from '../services/maintenanceService';
-import MaintenanceForm from '../components/maintenance/MaintenanceForm';
+import housekeepingService from '../services/housekeepingService';
+import TaskForm from '../components/housekeeping/TaskForm';
 
-const MaintenancePage = () => {
-  const [requests, setRequests] = useState([]);
+const HousekeepingPage = () => {
+  const [tasks, setTasks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
   const [showForm, setShowForm] = useState(false);
-  const [editingRequest, setEditingRequest] = useState(null);
+  const [editingTask, setEditingTask] = useState(null);
 
   useEffect(() => {
-    fetchRequests();
+    fetchTasks();
   }, [filterStatus]);
 
-  const fetchRequests = async () => {
+  // ✅ FIXED: fetchTasks with better error handling
+  const fetchTasks = async () => {
     try {
       setLoading(true);
-      const response = await maintenanceService.getRequests(filterStatus);
-      setRequests(response.data || []);
+      console.log('🔄 Fetching housekeeping tasks with status:', filterStatus);
+      
+      const response = await housekeepingService.getTasks(filterStatus);
+      console.log('📥 Response data:', response);
+      
+      if (response && response.success) {
+        setTasks(response.data || []);
+        console.log('✅ Loaded', response.data?.length || 0, 'tasks');
+      } else {
+        console.warn('⚠️ Unexpected response format:', response);
+        setTasks([]);
+      }
     } catch (error) {
-      toast.error('Failed to load maintenance requests');
-      console.error('Error:', error);
+      console.error('❌ Error fetching housekeeping tasks:', error);
+      toast.error('Failed to load housekeeping tasks');
+      setTasks([]);
     } finally {
       setLoading(false);
     }
   };
 
   const handleDelete = async (id) => {
-    if (!window.confirm('Are you sure you want to delete this maintenance request?')) return;
+    if (!window.confirm('Are you sure you want to delete this task?')) return;
     
     try {
-      await maintenanceService.deleteRequest(id);
-      toast.success('Request deleted successfully');
-      fetchRequests();
+      await housekeepingService.deleteTask(id);
+      toast.success('Task deleted successfully');
+      await fetchTasks();
     } catch (error) {
-      toast.error('Failed to delete request');
+      toast.error('Failed to delete task');
     }
   };
 
+  // ✅ FIXED: handleStatusUpdate with better error handling
   const handleStatusUpdate = async (id, newStatus) => {
     try {
-      await maintenanceService.updateRequest(id, { status: newStatus });
-      toast.success(`Request marked as ${newStatus.replace('_', ' ')}`);
-      fetchRequests();
+      console.log(`🔄 Updating housekeeping ${id} to status: ${newStatus}`);
+      
+      const response = await housekeepingService.updateTask(id, { status: newStatus });
+      
+      if (response && response.success) {
+        toast.success(`Task marked as ${newStatus}`);
+        await fetchTasks();
+      } else {
+        toast.error(response?.message || 'Failed to update task status');
+        console.error('❌ Update failed:', response);
+      }
     } catch (error) {
-      toast.error('Failed to update request status');
+      console.error('❌ Error updating status:', error);
+      toast.error(error.message || 'Failed to update task status');
     }
   };
 
   const getStatusColor = (status) => {
     const colors = {
-      open: 'bg-red-100 text-red-800',
+      pending: 'bg-yellow-100 text-yellow-800',
       assigned: 'bg-blue-100 text-blue-800',
-      in_progress: 'bg-yellow-100 text-yellow-800',
+      cleaning: 'bg-purple-100 text-purple-800',
       completed: 'bg-green-100 text-green-800',
-      cancelled: 'bg-gray-100 text-gray-800'
+      inspected: 'bg-indigo-100 text-indigo-800'
     };
     return colors[status] || 'bg-gray-100 text-gray-800';
   };
@@ -79,9 +99,9 @@ const MaintenancePage = () => {
   const getPriorityColor = (priority) => {
     const colors = {
       low: 'bg-gray-100 text-gray-800',
-      medium: 'bg-blue-100 text-blue-800',
+      normal: 'bg-blue-100 text-blue-800',
       high: 'bg-orange-100 text-orange-800',
-      critical: 'bg-red-100 text-red-800'
+      urgent: 'bg-red-100 text-red-800'
     };
     return colors[priority] || 'bg-gray-100 text-gray-800';
   };
@@ -89,51 +109,37 @@ const MaintenancePage = () => {
   const getStatusIcon = (status) => {
     switch(status) {
       case 'completed': return <FaCheckCircle className="text-green-500" />;
-      case 'cancelled': return <FaTimesCircle className="text-gray-500" />;
-      case 'open': return <FaExclamationTriangle className="text-red-500" />;
+      case 'assigned': return <FaUserCheck className="text-blue-500" />;
+      case 'cleaning': return <FaBroom className="text-purple-500" />;
       default: return <FaClock className="text-yellow-500" />;
     }
   };
 
-  const getCategoryIcon = (category) => {
-    const icons = {
-      plumbing: '🚿',
-      electrical: '💡',
-      hvac: '❄️',
-      furniture: '🪑',
-      bathroom: '🚽',
-      internet: '📶',
-      appliance: '🔌',
-      structural: '🏗️',
-      other: '🔧'
-    };
-    return icons[category] || '🔧';
-  };
-
-  const getStatusActions = (status) => {
+  // Get the next action for each status
+  const getNextAction = (status) => {
     const actions = {
-      open: { next: 'assigned', label: 'Assign', color: 'btn-primary' },
-      assigned: { next: 'in_progress', label: 'Start', color: 'btn-primary' },
-      in_progress: { next: 'completed', label: 'Complete', color: 'btn-primary' },
-      completed: { next: null, label: null, color: null },
-      cancelled: { next: null, label: null, color: null }
+      pending: { next: 'assigned', label: 'Assign', color: 'bg-blue-600 hover:bg-blue-700' },
+      assigned: { next: 'cleaning', label: 'Start', color: 'bg-purple-600 hover:bg-purple-700' },
+      cleaning: { next: 'completed', label: 'Complete', color: 'bg-green-600 hover:bg-green-700' },
+      completed: { next: 'inspected', label: 'Inspect', color: 'bg-indigo-600 hover:bg-indigo-700' },
+      inspected: null,
     };
-    return actions[status] || { next: null, label: null, color: null };
+    return actions[status] || null;
   };
 
-  // Filter requests
-  const filteredRequests = requests.filter(req => {
-    const matchSearch = req.room_number?.includes(search) || 
-                        req.description?.toLowerCase().includes(search.toLowerCase());
+  // Filter tasks by search
+  const filteredTasks = tasks.filter(task => {
+    const matchSearch = task.room_number?.includes(search) || 
+                        task.assigned_to_name?.toLowerCase().includes(search.toLowerCase());
     return matchSearch;
   });
 
   // Stats
   const stats = {
-    total: requests.length,
-    open: requests.filter(r => r.status === 'open').length,
-    inProgress: requests.filter(r => r.status === 'in_progress' || r.status === 'assigned').length,
-    completed: requests.filter(r => r.status === 'completed').length
+    total: tasks.length,
+    pending: tasks.filter(t => t.status === 'pending').length,
+    inProgress: tasks.filter(t => t.status === 'assigned' || t.status === 'cleaning').length,
+    completed: tasks.filter(t => t.status === 'completed' || t.status === 'inspected').length
   };
 
   return (
@@ -141,18 +147,18 @@ const MaintenancePage = () => {
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Maintenance</h1>
-          <p className="text-gray-600 mt-1">Manage and track maintenance requests</p>
+          <h1 className="text-2xl font-bold text-gray-900">Housekeeping</h1>
+          <p className="text-gray-600 mt-1">Manage cleaning tasks and assignments</p>
         </div>
         <button 
           onClick={() => {
-            setEditingRequest(null);
+            setEditingTask(null);
             setShowForm(true);
           }}
           className="mt-3 sm:mt-0 btn-primary flex items-center"
         >
           <FaPlus className="mr-2" />
-          New Request
+          New Task
         </button>
       </div>
 
@@ -161,22 +167,22 @@ const MaintenancePage = () => {
         <div className="card bg-white">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-600">Total</p>
+              <p className="text-sm text-gray-600">Total Tasks</p>
               <p className="text-2xl font-bold text-gray-900">{stats.total}</p>
             </div>
             <div className="p-3 bg-gray-100 rounded-lg">
-              <FaTools className="h-5 w-5 text-gray-600" />
+              <FaBroom className="h-5 w-5 text-gray-600" />
             </div>
           </div>
         </div>
         <div className="card bg-white">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-600">Open</p>
-              <p className="text-2xl font-bold text-red-600">{stats.open}</p>
+              <p className="text-sm text-gray-600">Pending</p>
+              <p className="text-2xl font-bold text-yellow-600">{stats.pending}</p>
             </div>
-            <div className="p-3 bg-red-100 rounded-lg">
-              <FaExclamationTriangle className="h-5 w-5 text-red-600" />
+            <div className="p-3 bg-yellow-100 rounded-lg">
+              <FaClock className="h-5 w-5 text-yellow-600" />
             </div>
           </div>
         </div>
@@ -184,10 +190,10 @@ const MaintenancePage = () => {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-gray-600">In Progress</p>
-              <p className="text-2xl font-bold text-yellow-600">{stats.inProgress}</p>
+              <p className="text-2xl font-bold text-purple-600">{stats.inProgress}</p>
             </div>
-            <div className="p-3 bg-yellow-100 rounded-lg">
-              <FaClock className="h-5 w-5 text-yellow-600" />
+            <div className="p-3 bg-purple-100 rounded-lg">
+              <FaBroom className="h-5 w-5 text-purple-600" />
             </div>
           </div>
         </div>
@@ -211,7 +217,7 @@ const MaintenancePage = () => {
             <FaSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
             <input
               type="text"
-              placeholder="Search by room or description..."
+              placeholder="Search by room number or staff..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="input-field pl-10"
@@ -224,15 +230,15 @@ const MaintenancePage = () => {
               className="input-field"
             >
               <option value="">All Status</option>
-              <option value="open">Open</option>
+              <option value="pending">Pending</option>
               <option value="assigned">Assigned</option>
-              <option value="in_progress">In Progress</option>
+              <option value="cleaning">Cleaning</option>
               <option value="completed">Completed</option>
-              <option value="cancelled">Cancelled</option>
+              <option value="inspected">Inspected</option>
             </select>
           </div>
           <button 
-            onClick={fetchRequests}
+            onClick={fetchTasks}
             className="btn-secondary"
           >
             Refresh
@@ -240,72 +246,63 @@ const MaintenancePage = () => {
         </div>
       </div>
 
-      {/* Requests List */}
+      {/* Tasks List */}
       {loading ? (
         <div className="text-center py-12">
           <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-primary-600 mx-auto"></div>
-          <p className="mt-3 text-gray-600">Loading maintenance requests...</p>
+          <p className="mt-3 text-gray-600">Loading tasks...</p>
         </div>
-      ) : filteredRequests.length === 0 ? (
+      ) : filteredTasks.length === 0 ? (
         <div className="card text-center py-12">
-          <FaTools className="h-16 w-16 text-gray-300 mx-auto mb-4" />
-          <p className="text-gray-500 text-lg">No maintenance requests found</p>
-          <p className="text-gray-400 text-sm">Create a new maintenance request</p>
+          <FaBroom className="h-16 w-16 text-gray-300 mx-auto mb-4" />
+          <p className="text-gray-500 text-lg">No housekeeping tasks</p>
+          <p className="text-gray-400 text-sm">Create a new task or wait for checkouts</p>
         </div>
       ) : (
         <div className="space-y-3">
-          {filteredRequests.map((request) => {
-            const action = getStatusActions(request.status);
+          {filteredTasks.map((task) => {
+            const action = getNextAction(task.status);
             return (
-              <div key={request.id} className="card hover:shadow-lg transition-shadow">
+              <div key={task.id} className="card hover:shadow-lg transition-shadow border-l-4 border-l-transparent hover:border-l-primary-500">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                   <div className="flex items-start space-x-4">
                     <div className="text-2xl">
-                      {getCategoryIcon(request.category)}
+                      {getStatusIcon(task.status)}
                     </div>
                     <div>
                       <div className="flex items-center gap-2 mb-1 flex-wrap">
                         <h3 className="font-semibold text-gray-900">
-                          Room {request.room_number}
+                          Room {task.room_number}
                         </h3>
-                        <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${getPriorityColor(request.priority)}`}>
-                          {request.priority}
+                        <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${getPriorityColor(task.priority)}`}>
+                          {task.priority || 'Normal'}
                         </span>
                       </div>
-                      <p className="text-sm text-gray-600">{request.description}</p>
-                      <div className="flex flex-wrap items-center gap-3 mt-1 text-xs text-gray-500">
-                        <span className="flex items-center gap-1">
-                          <span className="capitalize">{request.category}</span>
-                        </span>
-                        <span>•</span>
-                        <span className="flex items-center gap-1">
-                          <FaCalendar className="h-3 w-3" />
-                          {new Date(request.created_at).toLocaleDateString()}
-                        </span>
-                        {request.assigned_to_name && (
-                          <>
-                            <span>•</span>
-                            <span className="flex items-center gap-1">
-                              <FaUser className="h-3 w-3" />
-                              {request.assigned_to_name}
-                            </span>
-                          </>
+                      <div className="flex flex-wrap items-center gap-3 text-xs text-gray-500">
+                        <span>{new Date(task.created_at).toLocaleDateString()}</span>
+                        {task.assigned_to_name ? (
+                          <span className="flex items-center gap-1">
+                            <FaUser className="h-3 w-3" />
+                            {task.assigned_to_name}
+                          </span>
+                        ) : (
+                          <span className="text-yellow-600">Unassigned</span>
                         )}
                       </div>
                     </div>
                   </div>
                   <div className="flex items-center gap-2 flex-wrap">
                     {/* Status Badge */}
-                    <span className={`px-3 py-1 text-xs font-medium rounded-full flex items-center gap-1 ${getStatusColor(request.status)}`}>
-                      {getStatusIcon(request.status)}
-                      <span className="capitalize">{request.status.replace('_', ' ')}</span>
+                    <span className={`px-3 py-1 text-xs font-medium rounded-full flex items-center gap-1 ${getStatusColor(task.status)}`}>
+                      {getStatusIcon(task.status)}
+                      <span className="capitalize">{task.status}</span>
                     </span>
 
                     {/* Quick Action Button */}
-                    {action.next && (
+                    {action && (
                       <button
-                        onClick={() => handleStatusUpdate(request.id, action.next)}
-                        className={`${action.color} text-xs py-1 px-2 flex items-center gap-1`}
+                        onClick={() => handleStatusUpdate(task.id, action.next)}
+                        className={`${action.color} text-white text-xs py-1 px-3 rounded-lg flex items-center gap-1 transition-colors`}
                         title={action.label}
                       >
                         <FaArrowRight className="h-2 w-2" />
@@ -316,7 +313,7 @@ const MaintenancePage = () => {
                     {/* Edit Button */}
                     <button
                       onClick={() => {
-                        setEditingRequest(request);
+                        setEditingTask(task);
                         setShowForm(true);
                       }}
                       className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
@@ -327,7 +324,7 @@ const MaintenancePage = () => {
 
                     {/* Delete Button */}
                     <button
-                      onClick={() => handleDelete(request.id)}
+                      onClick={() => handleDelete(task.id)}
                       className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
                       title="Delete"
                     >
@@ -341,18 +338,18 @@ const MaintenancePage = () => {
         </div>
       )}
 
-      {/* Maintenance Form Modal */}
+      {/* Task Form Modal */}
       {showForm && (
-        <MaintenanceForm
-          request={editingRequest}
+        <TaskForm
+          task={editingTask}
           onClose={() => {
             setShowForm(false);
-            setEditingRequest(null);
+            setEditingTask(null);
           }}
           onSuccess={() => {
             setShowForm(false);
-            setEditingRequest(null);
-            fetchRequests();
+            setEditingTask(null);
+            fetchTasks();
           }}
         />
       )}
@@ -360,4 +357,4 @@ const MaintenancePage = () => {
   );
 };
 
-export default MaintenancePage;
+export default HousekeepingPage;
