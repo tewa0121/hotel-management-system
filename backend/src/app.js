@@ -4,7 +4,6 @@ const dotenv = require('dotenv');
 const { initializeDatabase } = require('./config/db');
 const errorHandler = require('./middleware/errorHandler');
 
-// Load env vars
 dotenv.config();
 
 // Route imports
@@ -18,7 +17,8 @@ const maintenanceRoutes = require('./routes/maintenanceRoutes');
 const reportRoutes = require('./routes/reportRoutes');
 const invoiceRoutes = require('./routes/invoiceRoutes');
 const dashboardRoutes = require('./routes/dashboardRoutes');
-const settingsRoutes = require('./routes/settingsRoutes'); // Added this
+const settingsRoutes = require('./routes/settingsRoutes');
+const expenseRoutes = require('./routes/expenseRoutes'); // ✅ ADD THIS
 
 const app = express();
 
@@ -36,8 +36,8 @@ initializeDatabase().then(success => {
 
 // Health check
 app.get('/api/health', (req, res) => {
-    res.json({ 
-        status: 'OK', 
+    res.json({
+        status: 'OK',
         message: 'Hotel Management System API is running',
         timestamp: new Date().toISOString()
     });
@@ -54,16 +54,17 @@ app.use('/api/maintenance', maintenanceRoutes);
 app.use('/api/reports', reportRoutes);
 app.use('/api/invoices', invoiceRoutes);
 app.use('/api/dashboard', dashboardRoutes);
-app.use('/api/settings', settingsRoutes); // Added this
+app.use('/api/settings', settingsRoutes);
+app.use('/api/expenses', expenseRoutes); // ✅ ADD THIS
 
 // Error handling middleware
 app.use(errorHandler);
 
 // 404 handler
 app.use((req, res) => {
-    res.status(404).json({ 
-        success: false, 
-        message: 'API endpoint not found' 
+    res.status(404).json({
+        success: false,
+        message: 'API endpoint not found'
     });
 });
 

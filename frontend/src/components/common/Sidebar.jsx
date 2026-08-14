@@ -15,7 +15,8 @@ import {
   FaSignOutAlt,
   FaHotel,
   FaUserCircle,
-  FaFileInvoice  // Added this import
+  FaFileInvoice,
+  FaMoneyBillWave  // ✅ ADDED for Expenses
 } from 'react-icons/fa';
 
 const Sidebar = () => {
@@ -28,7 +29,8 @@ const Sidebar = () => {
     { path: '/rooms', icon: FaBed, label: 'Rooms' },
     { path: '/reservations', icon: FaCalendarCheck, label: 'Reservations' },
     { path: '/payments', icon: FaCreditCard, label: 'Payments' },
-    { path: '/invoices', icon: FaFileInvoice, label: 'Invoices' },  // Added this line
+    { path: '/invoices', icon: FaFileInvoice, label: 'Invoices' },
+    { path: '/expenses', icon: FaMoneyBillWave, label: 'Expenses' },  // ✅ ADDED
     { path: '/housekeeping', icon: FaBroom, label: 'Housekeeping' },
     { path: '/maintenance', icon: FaTools, label: 'Maintenance' },
     { path: '/reports', icon: FaChartBar, label: 'Reports' },

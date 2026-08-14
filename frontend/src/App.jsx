@@ -11,10 +11,11 @@ import RoomsPage from './pages/RoomsPage';
 import ReservationsPage from './pages/ReservationsPage';
 import PaymentsPage from './pages/PaymentsPage';
 import InvoicesPage from './pages/InvoicesPage';
+import ExpensesPage from './pages/ExpensesPage'; // ✅ ADDED
 import HousekeepingPage from './pages/HousekeepingPage';
 import MaintenancePage from './pages/MaintenancePage';
 import ReportsPage from './pages/ReportsPage';
-import SettingsPage from './pages/SettingsPage'; // Added Settings import
+import SettingsPage from './pages/SettingsPage';
 
 // Layout Component
 import Layout from './components/common/Layout';
@@ -119,6 +120,14 @@ function App() {
               <ProtectedRoute>
                 <Layout>
                   <InvoicesPage />
+                </Layout>
+              </ProtectedRoute>
+            } />
+            
+            <Route path="/expenses" element={  // ✅ ADDED
+              <ProtectedRoute>
+                <Layout>
+                  <ExpensesPage />
                 </Layout>
               </ProtectedRoute>
             } />

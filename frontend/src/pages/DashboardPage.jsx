@@ -11,7 +11,8 @@ import {
   FaCheckCircle,
   FaClock,
   FaChartLine,
-  FaCreditCard
+  FaCreditCard,
+  FaWallet  // ✅ ADDED for Expenses
 } from 'react-icons/fa';
 import {
   Chart as ChartJS,
@@ -24,12 +25,12 @@ import {
   ArcElement,
   PointElement,
   LineElement,
-  Filler  // Added Filler
+  Filler
 } from 'chart.js';
 import { Bar, Pie, Line } from 'react-chartjs-2';
 import dashboardService from '../services/dashboardService';
 
-// Register ChartJS components - including Filler
+// Register ChartJS components
 ChartJS.register(
   CategoryScale,
   LinearScale,
@@ -40,7 +41,7 @@ ChartJS.register(
   ArcElement,
   PointElement,
   LineElement,
-  Filler  // Added Filler
+  Filler
 );
 
 const DashboardPage = () => {
@@ -59,7 +60,10 @@ const DashboardPage = () => {
     todayRevenue: 0,
     monthlyRevenue: 0,
     totalGuests: 0,
-    outstandingBalance: 0
+    outstandingBalance: 0,
+    totalExpenses: 0,      // ✅ ADDED
+    monthlyExpenses: 0,    // ✅ ADDED
+    netProfit: 0           // ✅ ADDED
   });
   const [occupancyData, setOccupancyData] = useState([]);
   const [revenueData, setRevenueData] = useState([]);
@@ -74,7 +78,7 @@ const DashboardPage = () => {
     try {
       setLoading(true);
       
-      // Fetch all data in parallel with error handling for each
+      // Fetch all data in parallel
       const results = await Promise.allSettled([
         dashboardService.getStats(),
         dashboardService.getOccupancyData(30),
@@ -83,7 +87,6 @@ const DashboardPage = () => {
         dashboardService.getRecentActivity(10)
       ]);
 
-      // Process each result with proper error handling
       const [statsRes, occupancyRes, revenueRes, paymentRes, activityRes] = results;
 
       if (statsRes.status === 'fulfilled' && statsRes.value?.success) {
@@ -95,7 +98,6 @@ const DashboardPage = () => {
       if (occupancyRes.status === 'fulfilled' && occupancyRes.value?.success) {
         setOccupancyData(occupancyRes.value.data || []);
       } else {
-        // Generate sample occupancy data
         const sampleData = [];
         for (let i = 29; i >= 0; i--) {
           const date = new Date();
@@ -112,7 +114,6 @@ const DashboardPage = () => {
       if (revenueRes.status === 'fulfilled' && revenueRes.value?.success) {
         setRevenueData(revenueRes.value.data || []);
       } else {
-        // Generate sample revenue data
         const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'];
         const sampleData = months.map(month => ({
           label: month,
@@ -124,7 +125,6 @@ const DashboardPage = () => {
       if (paymentRes.status === 'fulfilled' && paymentRes.value?.success) {
         setPaymentBreakdown(paymentRes.value.data || []);
       } else {
-        // Generate sample payment data
         setPaymentBreakdown([
           { payment_method: 'cash', total: 4500 },
           { payment_method: 'credit_card', total: 8200 },
@@ -138,6 +138,9 @@ const DashboardPage = () => {
         setRecentActivity([]);
       }
       
+      // ✅ Fetch expenses data
+      await fetchExpensesData();
+      
     } catch (error) {
       console.error('Error fetching dashboard data:', error);
       toast.error('Failed to load some dashboard data');
@@ -146,7 +149,35 @@ const DashboardPage = () => {
     }
   };
 
-  // Chart configurations with safe data handling
+  // ✅ NEW: Fetch expenses data
+  const fetchExpensesData = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch('http://localhost:5000/api/expenses', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      const data = await response.json();
+      
+      if (data.success) {
+        const expenses = data.data || [];
+        const totalExpenses = expenses.reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
+        const monthlyExpenses = expenses
+          .filter(e => new Date(e.expense_date).getMonth() === new Date().getMonth())
+          .reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
+        
+        setStats(prev => ({
+          ...prev,
+          totalExpenses,
+          monthlyExpenses,
+          netProfit: (prev.monthlyRevenue || 0) - monthlyExpenses
+        }));
+      }
+    } catch (error) {
+      console.error('Error fetching expenses:', error);
+    }
+  };
+
+  // Chart configurations
   const occupancyChartData = {
     labels: occupancyData.map(d => d.date) || [],
     datasets: [
@@ -291,6 +322,32 @@ const DashboardPage = () => {
           value={stats.outstandingBalance || 0}
           color="bg-orange-500"
           prefix="$"
+        />
+      </div>
+
+      {/* ✅ NEW: Stats Grid - Row 3 (Expenses & Profit) */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
+        <StatCard
+          icon={FaWallet}
+          title="Total Expenses"
+          value={stats.totalExpenses || 0}
+          color="bg-red-500"
+          prefix="$"
+        />
+        <StatCard
+          icon={FaWallet}
+          title="Monthly Expenses"
+          value={stats.monthlyExpenses || 0}
+          color="bg-orange-500"
+          prefix="$"
+        />
+        <StatCard
+          icon={FaMoneyBillWave}
+          title="Net Profit"
+          value={stats.netProfit || 0}
+          color={stats.netProfit >= 0 ? 'bg-green-500' : 'bg-red-500'}
+          prefix="$"
+          subtitle={stats.netProfit >= 0 ? '💰 Profitable' : '📉 Loss'}
         />
       </div>
 
