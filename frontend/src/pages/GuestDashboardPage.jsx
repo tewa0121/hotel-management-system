@@ -9,7 +9,8 @@ import {
     FaBed,
     FaMoneyBillWave,
     FaClock,
-    FaEdit
+    FaEdit,
+    FaTimes
 } from 'react-icons/fa';
 
 const GuestDashboardPage = () => {
@@ -18,6 +19,16 @@ const GuestDashboardPage = () => {
     const [invoices, setInvoices] = useState([]);
     const [loading, setLoading] = useState(true);
     const [activeTab, setActiveTab] = useState('dashboard');
+    const [showEditModal, setShowEditModal] = useState(false);
+    const [editLoading, setEditLoading] = useState(false);
+    const [editForm, setEditForm] = useState({
+        first_name: '',
+        last_name: '',
+        phone: '',
+        address: '',
+        city: '',
+        country: ''
+    });
     const navigate = useNavigate();
 
     useEffect(() => {
@@ -48,7 +59,17 @@ const GuestDashboardPage = () => {
             const reservationsData = await reservationsRes.json();
             const invoicesData = await invoicesRes.json();
 
-            if (profileData.success) setGuest(profileData.data);
+            if (profileData.success) {
+                setGuest(profileData.data);
+                setEditForm({
+                    first_name: profileData.data.first_name || '',
+                    last_name: profileData.data.last_name || '',
+                    phone: profileData.data.phone || '',
+                    address: profileData.data.address || '',
+                    city: profileData.data.city || '',
+                    country: profileData.data.country || ''
+                });
+            }
             if (reservationsData.success) setReservations(reservationsData.data);
             if (invoicesData.success) setInvoices(invoicesData.data);
         } catch (error) {
@@ -63,6 +84,52 @@ const GuestDashboardPage = () => {
         localStorage.removeItem('guest');
         navigate('/guest/login');
         toast.success('Logged out');
+    };
+
+    const handleEditClick = () => {
+        setShowEditModal(true);
+    };
+
+    const handleEditChange = (e) => {
+        const { name, value } = e.target;
+        setEditForm(prev => ({ ...prev, [name]: value }));
+    };
+
+    const handleEditSubmit = async (e) => {
+        e.preventDefault();
+        const token = localStorage.getItem('guestToken');
+        if (!token) {
+            toast.error('Not authenticated');
+            return;
+        }
+
+        setEditLoading(true);
+        try {
+            const response = await fetch('http://localhost:5000/api/guest/profile', {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify(editForm)
+            });
+            const data = await response.json();
+            if (data.success) {
+                toast.success('Profile updated successfully!');
+                setGuest(data.data);
+                setShowEditModal(false);
+                // Update guest in localStorage
+                const storedGuest = JSON.parse(localStorage.getItem('guest') || '{}');
+                const updatedGuest = { ...storedGuest, ...data.data };
+                localStorage.setItem('guest', JSON.stringify(updatedGuest));
+            } else {
+                toast.error(data.message || 'Failed to update profile');
+            }
+        } catch (error) {
+            toast.error('Network error. Please try again.');
+        } finally {
+            setEditLoading(false);
+        }
     };
 
     const getStatusColor = (status) => {
@@ -139,8 +206,12 @@ const GuestDashboardPage = () => {
                             <p className="text-gray-600">{guest?.email}</p>
                             <p className="text-gray-500 text-sm">{guest?.phone}</p>
                         </div>
-                        <button className="btn-secondary text-sm">
-                            <FaEdit className="inline mr-1" /> Edit Profile
+                        {/* ✅ Edit Profile Button with onClick */}
+                        <button 
+                            onClick={handleEditClick}
+                            className="btn-secondary text-sm flex items-center gap-2"
+                        >
+                            <FaEdit /> Edit Profile
                         </button>
                     </div>
                 </div>
@@ -281,6 +352,127 @@ const GuestDashboardPage = () => {
                     </div>
                 )}
             </div>
+
+            {/* ✅ Edit Profile Modal */}
+            {showEditModal && (
+                <div className="fixed inset-0 z-50 overflow-y-auto bg-black/50 flex items-center justify-center p-4">
+                    <div className="bg-white rounded-xl shadow-2xl max-w-md w-full">
+                        <div className="flex items-center justify-between p-4 border-b border-gray-200">
+                            <h2 className="text-lg font-bold text-gray-900">Edit Profile</h2>
+                            <button
+                                onClick={() => setShowEditModal(false)}
+                                className="p-1 hover:bg-gray-100 rounded-lg transition-colors"
+                            >
+                                <FaTimes className="h-5 w-5 text-gray-500" />
+                            </button>
+                        </div>
+
+                        <form onSubmit={handleEditSubmit} className="p-6 space-y-4">
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                    First Name <span className="text-red-500">*</span>
+                                </label>
+                                <input
+                                    type="text"
+                                    name="first_name"
+                                    value={editForm.first_name}
+                                    onChange={handleEditChange}
+                                    className="input-field"
+                                    required
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                    Last Name <span className="text-red-500">*</span>
+                                </label>
+                                <input
+                                    type="text"
+                                    name="last_name"
+                                    value={editForm.last_name}
+                                    onChange={handleEditChange}
+                                    className="input-field"
+                                    required
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                    Phone <span className="text-red-500">*</span>
+                                </label>
+                                <input
+                                    type="text"
+                                    name="phone"
+                                    value={editForm.phone}
+                                    onChange={handleEditChange}
+                                    className="input-field"
+                                    placeholder="0912345678"
+                                    required
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                    Address
+                                </label>
+                                <input
+                                    type="text"
+                                    name="address"
+                                    value={editForm.address}
+                                    onChange={handleEditChange}
+                                    className="input-field"
+                                    placeholder="123 Main Street"
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                    City
+                                </label>
+                                <input
+                                    type="text"
+                                    name="city"
+                                    value={editForm.city}
+                                    onChange={handleEditChange}
+                                    className="input-field"
+                                    placeholder="Addis Ababa"
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                    Country
+                                </label>
+                                <input
+                                    type="text"
+                                    name="country"
+                                    value={editForm.country}
+                                    onChange={handleEditChange}
+                                    className="input-field"
+                                    placeholder="Ethiopia"
+                                />
+                            </div>
+
+                            <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
+                                <button
+                                    type="button"
+                                    onClick={() => setShowEditModal(false)}
+                                    className="btn-secondary"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    type="submit"
+                                    disabled={editLoading}
+                                    className="btn-primary"
+                                >
+                                    {editLoading ? 'Saving...' : 'Save Changes'}
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

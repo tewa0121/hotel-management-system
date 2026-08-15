@@ -1,7 +1,9 @@
 const jwt = require('jsonwebtoken');
 const { pool } = require('../config/db');
 
-// Verify JWT token
+// ============================================
+// VERIFY TOKEN – Supports Staff & Guests
+// ============================================
 const verifyToken = async (req, res, next) => {
     try {
         const token = req.headers.authorization?.split(' ')[1];
@@ -13,24 +15,64 @@ const verifyToken = async (req, res, next) => {
             });
         }
 
-        const decoded = jwt.verify(token, process.env.JWT_SECRET);
-        
-        // Check if user still exists
-        const [users] = await pool.execute(
-            'SELECT id, name, email, role, is_active FROM users WHERE id = ? AND is_active = TRUE',
-            [decoded.userId]
-        );
+        console.log('🔍 Verifying token:', token.substring(0, 20) + '...');
 
-        if (users.length === 0) {
-            return res.status(401).json({
-                success: false,
-                message: 'User not found or inactive'
-            });
+        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        console.log('✅ Token decoded:', decoded);
+
+        // ✅ Check if it's a guest token (has 'id' and role 'guest')
+        if (decoded.role === 'guest' || decoded.id) {
+            // Guest token – removed 'is_active' because it doesn't exist
+            const [guests] = await pool.execute(
+                'SELECT id, first_name, last_name, email, phone, total_stays, total_spent FROM guests WHERE id = ?',
+                [decoded.id || decoded.guestId]
+            );
+
+            if (guests.length === 0) {
+                console.log('❌ Guest not found for ID:', decoded.id);
+                return res.status(401).json({
+                    success: false,
+                    message: 'Guest not found'
+                });
+            }
+
+            // Attach guest to req.user with role
+            req.user = {
+                ...guests[0],
+                role: 'guest',
+                name: `${guests[0].first_name} ${guests[0].last_name}`
+            };
+            console.log('✅ Guest authenticated:', req.user.email);
+            return next();
         }
 
-        req.user = users[0];
-        next();
+        // ✅ Staff token (has 'userId')
+        if (decoded.userId) {
+            const [users] = await pool.execute(
+                'SELECT id, name, email, role, is_active FROM users WHERE id = ? AND is_active = TRUE',
+                [decoded.userId]
+            );
+
+            if (users.length === 0) {
+                return res.status(401).json({
+                    success: false,
+                    message: 'User not found or inactive'
+                });
+            }
+
+            req.user = users[0];
+            console.log('✅ Staff authenticated:', req.user.email);
+            return next();
+        }
+
+        // If neither, reject
+        return res.status(401).json({
+            success: false,
+            message: 'Invalid token payload'
+        });
+
     } catch (error) {
+        console.error('❌ Token verification failed:', error.message);
         if (error.name === 'JsonWebTokenError') {
             return res.status(401).json({
                 success: false,
@@ -50,13 +92,23 @@ const verifyToken = async (req, res, next) => {
     }
 };
 
-// Check role permission
+// ============================================
+// AUTHORIZE – Staff roles only
+// ============================================
 const authorize = (...roles) => {
     return (req, res, next) => {
         if (!req.user) {
             return res.status(401).json({
                 success: false,
                 message: 'Unauthorized'
+            });
+        }
+        
+        // Guests cannot access staff routes
+        if (req.user.role === 'guest') {
+            return res.status(403).json({
+                success: false,
+                message: 'Guests are not authorized for this action'
             });
         }
         
@@ -71,7 +123,9 @@ const authorize = (...roles) => {
     };
 };
 
-// Log user activity
+// ============================================
+// LOG ACTIVITY
+// ============================================
 const logActivity = async (userId, action, entity, entityId, previousData = null, newData = null, ipAddress = null) => {
     try {
         await pool.execute(

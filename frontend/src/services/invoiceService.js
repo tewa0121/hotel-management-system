@@ -13,6 +13,16 @@ const invoiceService = {
     }
   },
 
+  // ✅ NEW: Get invoice stats (total, paid, overdue, draft, sent, totalAmount)
+  async getStats() {
+    try {
+      const response = await api.get('/invoices/stats');
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  },
+
   // Get invoice by ID
   async getInvoice(id) {
     try {

@@ -13,7 +13,7 @@ import {
 } from 'react-icons/fa';
 import invoiceService from '../services/invoiceService';
 import InvoiceForm from '../components/invoices/InvoiceForm';
-import emailService from '../services/emailService';  // ✅ ADDED
+import emailService from '../services/emailService';
 
 const InvoicesPage = () => {
   const [invoices, setInvoices] = useState([]);
@@ -22,9 +22,21 @@ const InvoicesPage = () => {
   const [filterStatus, setFilterStatus] = useState('');
   const [showForm, setShowForm] = useState(false);
   const [editingInvoice, setEditingInvoice] = useState(null);
+  
+  // ✅ NEW: Stats state
+  const [stats, setStats] = useState({
+    total: 0,
+    paid: 0,
+    overdue: 0,
+    draft: 0,
+    sent: 0,
+    totalAmount: 0
+  });
+  const [statsLoading, setStatsLoading] = useState(true);
 
   useEffect(() => {
     fetchInvoices();
+    fetchStats();
   }, [filterStatus]);
 
   const fetchInvoices = async () => {
@@ -37,6 +49,21 @@ const InvoicesPage = () => {
       console.error('Error:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  // ✅ NEW: Fetch stats from backend
+  const fetchStats = async () => {
+    try {
+      setStatsLoading(true);
+      const response = await invoiceService.getStats();
+      if (response.success) {
+        setStats(response.data);
+      }
+    } catch (error) {
+      console.error('Error fetching invoice stats:', error);
+    } finally {
+      setStatsLoading(false);
     }
   };
 
@@ -56,14 +83,14 @@ const InvoicesPage = () => {
     }
   };
 
-  // ✅ UPDATED: Send Invoice Email using emailService
   const handleSendEmail = async (id) => {
     if (!window.confirm('Send invoice email to guest?')) return;
     
     try {
       await emailService.sendInvoiceEmail(id);
       toast.success('✅ Invoice email sent successfully!');
-      fetchInvoices(); // Refresh to update status
+      fetchInvoices();
+      fetchStats(); // ✅ Refresh stats after sending
     } catch (error) {
       toast.error('Failed to send invoice email');
       console.error('Error:', error);
@@ -100,14 +127,6 @@ const InvoicesPage = () => {
     return num.toFixed(2);
   };
 
-  // Stats
-  const stats = {
-    total: invoices.length,
-    paid: invoices.filter(i => i.status === 'paid').length,
-    overdue: invoices.filter(i => i.status === 'overdue').length,
-    totalAmount: invoices.reduce((sum, i) => sum + (Number(i.total) || 0), 0)
-  };
-
   return (
     <div>
       {/* Header */}
@@ -128,13 +147,15 @@ const InvoicesPage = () => {
         </button>
       </div>
 
-      {/* Stats Cards */}
+      {/* Stats Cards – ✅ Using stats from backend */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
         <div className="card bg-white">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-gray-600">Total Invoices</p>
-              <p className="text-2xl font-bold text-gray-900">{stats.total}</p>
+              <p className="text-2xl font-bold text-gray-900">
+                {statsLoading ? '...' : stats.total}
+              </p>
             </div>
             <div className="p-3 bg-gray-100 rounded-lg">
               <FaFileInvoice className="h-5 w-5 text-gray-600" />
@@ -145,7 +166,9 @@ const InvoicesPage = () => {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-gray-600">Paid</p>
-              <p className="text-2xl font-bold text-green-600">{stats.paid}</p>
+              <p className="text-2xl font-bold text-green-600">
+                {statsLoading ? '...' : stats.paid}
+              </p>
             </div>
             <div className="p-3 bg-green-100 rounded-lg">
               <FaMoneyBillWave className="h-5 w-5 text-green-600" />
@@ -156,7 +179,9 @@ const InvoicesPage = () => {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-gray-600">Overdue</p>
-              <p className="text-2xl font-bold text-red-600">{stats.overdue}</p>
+              <p className="text-2xl font-bold text-red-600">
+                {statsLoading ? '...' : stats.overdue}
+              </p>
             </div>
             <div className="p-3 bg-red-100 rounded-lg">
               <FaCalendar className="h-5 w-5 text-red-600" />
@@ -168,7 +193,7 @@ const InvoicesPage = () => {
             <div>
               <p className="text-sm text-gray-600">Total Amount</p>
               <p className="text-2xl font-bold text-primary-600">
-                ${formatCurrency(stats.totalAmount)}
+                ${statsLoading ? '...' : formatCurrency(stats.totalAmount)}
               </p>
             </div>
             <div className="p-3 bg-primary-100 rounded-lg">
@@ -205,7 +230,7 @@ const InvoicesPage = () => {
               <option value="cancelled">Cancelled</option>
             </select>
           </div>
-          <button onClick={fetchInvoices} className="btn-secondary">
+          <button onClick={() => { fetchInvoices(); fetchStats(); }} className="btn-secondary">
             Refresh
           </button>
         </div>
@@ -316,6 +341,7 @@ const InvoicesPage = () => {
             setShowForm(false);
             setEditingInvoice(null);
             fetchInvoices();
+            fetchStats(); // ✅ Refresh stats after creating invoice
           }}
         />
       )}

@@ -14,7 +14,64 @@ const generateInvoiceNumber = () => {
   return `INV-${year}${month}${day}-${random}`;
 };
 
-// Get all invoices
+// ============================================
+// GET INVOICE STATS (for dashboard cards)
+// ============================================
+router.get('/stats', verifyToken, async (req, res) => {
+  try {
+    // Total invoices
+    const [totalResult] = await pool.execute(
+      'SELECT COUNT(*) as total FROM invoices'
+    );
+
+    // Paid invoices
+    const [paidResult] = await pool.execute(
+      'SELECT COUNT(*) as paid FROM invoices WHERE status = "paid"'
+    );
+
+    // Overdue invoices
+    const [overdueResult] = await pool.execute(
+      'SELECT COUNT(*) as overdue FROM invoices WHERE status = "overdue"'
+    );
+
+    // Total amount (sum of all invoices)
+    const [amountResult] = await pool.execute(
+      'SELECT COALESCE(SUM(total), 0) as totalAmount FROM invoices'
+    );
+
+    // Draft invoices
+    const [draftResult] = await pool.execute(
+      'SELECT COUNT(*) as draft FROM invoices WHERE status = "draft"'
+    );
+
+    // Sent invoices
+    const [sentResult] = await pool.execute(
+      'SELECT COUNT(*) as sent FROM invoices WHERE status = "sent"'
+    );
+
+    res.json({
+      success: true,
+      data: {
+        total: totalResult[0].total || 0,
+        paid: paidResult[0].paid || 0,
+        overdue: overdueResult[0].overdue || 0,
+        draft: draftResult[0].draft || 0,
+        sent: sentResult[0].sent || 0,
+        totalAmount: amountResult[0].totalAmount || 0
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching invoice stats:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching invoice stats'
+    });
+  }
+});
+
+// ============================================
+// GET ALL INVOICES (with pagination & status filter)
+// ============================================
 router.get('/', verifyToken, async (req, res) => {
   try {
     const page = parseInt(req.query.page) || 1;
@@ -67,7 +124,9 @@ router.get('/', verifyToken, async (req, res) => {
   }
 });
 
-// Get invoice by ID
+// ============================================
+// GET INVOICE BY ID
+// ============================================
 router.get('/:id', verifyToken, async (req, res) => {
   try {
     const [invoices] = await pool.execute(`
@@ -103,7 +162,9 @@ router.get('/:id', verifyToken, async (req, res) => {
   }
 });
 
-// Get invoice by reservation
+// ============================================
+// GET INVOICES BY RESERVATION
+// ============================================
 router.get('/reservation/:reservationId', verifyToken, async (req, res) => {
   try {
     const [invoices] = await pool.execute(`
@@ -130,7 +191,9 @@ router.get('/reservation/:reservationId', verifyToken, async (req, res) => {
   }
 });
 
-// Create invoice
+// ============================================
+// CREATE INVOICE
+// ============================================
 router.post('/', verifyToken, authorize('admin', 'manager', 'receptionist', 'accountant'), async (req, res) => {
   const connection = await pool.getConnection();
   try {
@@ -220,7 +283,9 @@ router.post('/', verifyToken, authorize('admin', 'manager', 'receptionist', 'acc
   }
 });
 
-// Update invoice
+// ============================================
+// UPDATE INVOICE
+// ============================================
 router.put('/:id', verifyToken, authorize('admin', 'manager', 'accountant'), async (req, res) => {
   try {
     const {
@@ -282,7 +347,9 @@ router.put('/:id', verifyToken, authorize('admin', 'manager', 'accountant'), asy
   }
 });
 
-// Download invoice (PDF placeholder)
+// ============================================
+// DOWNLOAD INVOICE (PDF placeholder)
+// ============================================
 router.get('/:id/download', verifyToken, async (req, res) => {
   try {
     const [invoice] = await pool.execute(`
@@ -305,8 +372,6 @@ router.get('/:id/download', verifyToken, async (req, res) => {
       });
     }
 
-    // For now, return JSON instead of PDF
-    // In production, you would generate a PDF here
     res.json({
       success: true,
       message: 'PDF download would be generated here',
@@ -321,7 +386,9 @@ router.get('/:id/download', verifyToken, async (req, res) => {
   }
 });
 
-// Send invoice email
+// ============================================
+// SEND INVOICE EMAIL
+// ============================================
 router.post('/:id/send', verifyToken, authorize('admin', 'manager', 'receptionist', 'accountant'), async (req, res) => {
   try {
     const { email } = req.body;
@@ -354,7 +421,6 @@ router.post('/:id/send', verifyToken, authorize('admin', 'manager', 'receptionis
       ['sent', req.params.id]
     );
 
-    // In production, you would send an actual email here
     res.json({
       success: true,
       message: `Invoice sent to ${email}`,
@@ -372,7 +438,9 @@ router.post('/:id/send', verifyToken, authorize('admin', 'manager', 'receptionis
   }
 });
 
-// Print invoice (HTML placeholder)
+// ============================================
+// PRINT INVOICE (HTML placeholder)
+// ============================================
 router.get('/:id/print', verifyToken, async (req, res) => {
   try {
     const [invoice] = await pool.execute(`
@@ -395,7 +463,6 @@ router.get('/:id/print', verifyToken, async (req, res) => {
       });
     }
 
-    // For now, return JSON
     res.json({
       success: true,
       message: 'Print view would be generated here',

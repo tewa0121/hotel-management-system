@@ -27,7 +27,6 @@ router.post('/login', async (req, res) => {
             });
         }
 
-        // Find guest by email (including password field)
         console.log('🔍 Looking up guest in database...');
         const guest = await Guest.findByEmailWithPassword(email);
 
@@ -53,7 +52,6 @@ router.post('/login', async (req, res) => {
             });
         }
 
-        // Compare password
         console.log('🔍 Comparing password with hash...');
         const isMatch = await bcrypt.compare(password, guest.password);
         console.log('🔍 Password match result:', isMatch);
@@ -68,7 +66,6 @@ router.post('/login', async (req, res) => {
 
         console.log('✅ Password matched successfully!');
 
-        // Generate JWT token
         const token = jwt.sign(
             {
                 id: guest.id,
@@ -81,7 +78,6 @@ router.post('/login', async (req, res) => {
             { expiresIn: '7d' }
         );
 
-        // Remove password from response
         delete guest.password;
 
         console.log('✅ Login successful for:', guest.email);
@@ -110,11 +106,14 @@ router.post('/login', async (req, res) => {
 });
 
 // ============================================
-// GET GUEST PROFILE
+// GET GUEST PROFILE – WITH DEBUG LOGS
 // ============================================
 router.get('/profile', verifyToken, async (req, res) => {
     try {
+        console.log('🔍 Guest profile request - User ID:', req.user.id);
         const guest = await Guest.findById(req.user.id);
+        console.log('🔍 Guest found:', guest ? 'Yes (ID: ' + guest.id + ')' : 'No');
+
         if (!guest) {
             return res.status(404).json({
                 success: false,
@@ -127,48 +126,58 @@ router.get('/profile', verifyToken, async (req, res) => {
             data: guest
         });
     } catch (error) {
-        console.error('Error fetching guest profile:', error);
+        console.error('❌ Error fetching guest profile:', error);
+        console.error('❌ Stack:', error.stack);
         res.status(500).json({
             success: false,
-            message: 'Error fetching profile'
+            message: 'Error fetching profile',
+            error: error.message
         });
     }
 });
 
 // ============================================
-// GET GUEST RESERVATIONS
+// GET GUEST RESERVATIONS – WITH DEBUG LOGS
 // ============================================
 router.get('/reservations', verifyToken, async (req, res) => {
     try {
+        console.log('🔍 Guest reservations request - User ID:', req.user.id);
         const reservations = await Guest.getReservations(req.user.id);
+        console.log('🔍 Reservations found:', reservations.length);
         res.json({
             success: true,
             data: reservations
         });
     } catch (error) {
-        console.error('Error fetching guest reservations:', error);
+        console.error('❌ Error fetching guest reservations:', error);
+        console.error('❌ Stack:', error.stack);
         res.status(500).json({
             success: false,
-            message: 'Error fetching reservations'
+            message: 'Error fetching reservations',
+            error: error.message
         });
     }
 });
 
 // ============================================
-// GET GUEST INVOICES
+// GET GUEST INVOICES – WITH DEBUG LOGS
 // ============================================
 router.get('/invoices', verifyToken, async (req, res) => {
     try {
+        console.log('🔍 Guest invoices request - User ID:', req.user.id);
         const invoices = await Guest.getInvoices(req.user.id);
+        console.log('🔍 Invoices found:', invoices.length);
         res.json({
             success: true,
             data: invoices
         });
     } catch (error) {
-        console.error('Error fetching guest invoices:', error);
+        console.error('❌ Error fetching guest invoices:', error);
+        console.error('❌ Stack:', error.stack);
         res.status(500).json({
             success: false,
-            message: 'Error fetching invoices'
+            message: 'Error fetching invoices',
+            error: error.message
         });
     }
 });
