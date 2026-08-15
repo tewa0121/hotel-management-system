@@ -21,12 +21,19 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   const login = async (email, password) => {
+    console.log('🔍 AuthContext.login called with:', { email, password }); // ✅ Debug
     try {
       setError(null);
       const response = await authService.login(email, password);
-      setUser(response.user);
-      return response;
+      console.log('✅ AuthContext.login response:', response); // ✅ Debug
+      if (response && response.success) {
+        setUser(response.user);
+        return response;
+      } else {
+        throw new Error(response?.message || 'Login failed');
+      }
     } catch (err) {
+      console.error('❌ AuthContext.login error:', err);
       setError(err.message || 'Login failed');
       throw err;
     }

@@ -3,7 +3,7 @@ import toast from 'react-hot-toast';
 import { FaTimes } from 'react-icons/fa';
 import guestService from '../../services/guestService';
 
-// ✅ Inline validators (if validators.js doesn't exist)
+// Validators
 const isValidEthiopianPhone = (phone) => {
     if (!phone) return false;
     const cleaned = phone.replace(/[\s\-()]/g, '');
@@ -32,7 +32,8 @@ const GuestForm = ({ guest, onClose, onSuccess }) => {
         nationality: '',
         emergency_contact_name: '',
         emergency_contact_phone: '',
-        notes: ''
+        notes: '',
+        password: '' // ✅ NEW: for guest login
     });
 
     useEffect(() => {
@@ -52,7 +53,8 @@ const GuestForm = ({ guest, onClose, onSuccess }) => {
                 nationality: guest.nationality || '',
                 emergency_contact_name: guest.emergency_contact_name || '',
                 emergency_contact_phone: guest.emergency_contact_phone || '',
-                notes: guest.notes || ''
+                notes: guest.notes || '',
+                password: '' // never pre-fill password for security
             });
         }
     }, [guest]);
@@ -65,6 +67,7 @@ const GuestForm = ({ guest, onClose, onSuccess }) => {
     const handleSubmit = async (e) => {
         e.preventDefault();
         
+        // Required fields
         if (!formData.first_name || !formData.last_name) {
             toast.error('First name and last name are required');
             return;
@@ -88,13 +91,29 @@ const GuestForm = ({ guest, onClose, onSuccess }) => {
             return;
         }
 
+        // ✅ Password validation – only required when creating a new guest
+        if (!guest && !formData.password) {
+            toast.error('Password is required for new guests');
+            return;
+        }
+        if (formData.password && formData.password.length < 6) {
+            toast.error('Password must be at least 6 characters');
+            return;
+        }
+
         setLoading(true);
         try {
+            // Prepare data – remove password if empty (for updates)
+            const submitData = { ...formData };
+            if (!submitData.password) {
+                delete submitData.password;
+            }
+
             if (guest) {
-                await guestService.updateGuest(guest.id, formData);
+                await guestService.updateGuest(guest.id, submitData);
                 toast.success('Guest updated successfully');
             } else {
-                await guestService.createGuest(formData);
+                await guestService.createGuest(submitData);
                 toast.success('Guest created successfully');
             }
             onSuccess();
@@ -120,6 +139,7 @@ const GuestForm = ({ guest, onClose, onSuccess }) => {
 
                 <form onSubmit={handleSubmit} className="p-6">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {/* Personal Info */}
                         <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">
                                 First Name <span className="text-red-500">*</span>
@@ -186,6 +206,27 @@ const GuestForm = ({ guest, onClose, onSuccess }) => {
                             </p>
                         </div>
 
+                        {/* ✅ NEW: Password Field */}
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                                Password {!guest && <span className="text-red-500">*</span>}
+                            </label>
+                            <input
+                                type="password"
+                                name="password"
+                                value={formData.password}
+                                onChange={handleChange}
+                                className="input-field"
+                                placeholder={guest ? 'Leave blank to keep current password' : 'Set a password for guest login'}
+                            />
+                            <p className="text-xs text-gray-500 mt-1">
+                                {guest
+                                    ? 'Leave empty to keep existing password'
+                                    : 'Guest will use this to log in and view their reservations'}
+                            </p>
+                        </div>
+
+                        {/* Address & Location */}
                         <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">Address</label>
                             <input
@@ -222,6 +263,7 @@ const GuestForm = ({ guest, onClose, onSuccess }) => {
                             />
                         </div>
 
+                        {/* ID & Personal Details */}
                         <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">ID Type</label>
                             <select

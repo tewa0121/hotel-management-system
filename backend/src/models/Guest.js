@@ -1,6 +1,9 @@
 const { pool } = require('../config/database');
 
 class Guest {
+    // ============================================
+    // GET ALL GUESTS (with pagination & search)
+    // ============================================
     static async findAll(page = 1, limit = 20, search = '') {
         const offset = (page - 1) * limit;
         let query = 'SELECT * FROM guests';
@@ -26,24 +29,35 @@ class Guest {
         };
     }
 
+    // ============================================
+    // FIND GUEST BY ID
+    // ============================================
     static async findById(id) {
         const [rows] = await pool.execute('SELECT * FROM guests WHERE id = ?', [id]);
         return rows[0];
     }
 
+    // ============================================
+    // FIND GUEST BY EMAIL
+    // ============================================
     static async findByEmail(email) {
         if (!email) return null;
         const [rows] = await pool.execute('SELECT * FROM guests WHERE email = ?', [email]);
         return rows[0];
     }
 
-    // ✅ NEW: Find guest by phone
+    // ============================================
+    // FIND GUEST BY PHONE
+    // ============================================
     static async findByPhone(phone) {
         if (!phone) return null;
         const [rows] = await pool.execute('SELECT * FROM guests WHERE phone = ?', [phone]);
         return rows[0];
     }
 
+    // ============================================
+    // CREATE GUEST
+    // ============================================
     static async create(data) {
         const {
             first_name, last_name, email, phone, address, city, country,
@@ -66,20 +80,20 @@ class Guest {
         return this.findById(result.insertId);
     }
 
-    // ✅ UPDATED: Update with validation
+    // ============================================
+    // UPDATE GUEST
+    // ============================================
     static async update(id, data) {
         console.log('=========================================');
         console.log(`📝 Guest.update() called for ID: ${id}`);
         console.log('📝 Update data:', JSON.stringify(data, null, 2));
 
-        // Get the existing guest
         const existing = await this.findById(id);
         if (!existing) {
             throw new Error(`Guest with ID ${id} not found`);
         }
         console.log('📊 Existing guest:', JSON.stringify(existing, null, 2));
 
-        // Build update data with fallback to existing values
         const firstName = data.first_name !== undefined ? data.first_name : existing.first_name;
         const lastName = data.last_name !== undefined ? data.last_name : existing.last_name;
         const email = data.email !== undefined ? data.email : existing.email;
@@ -160,11 +174,17 @@ class Guest {
         }
     }
 
+    // ============================================
+    // DELETE GUEST
+    // ============================================
     static async delete(id) {
         const [result] = await pool.execute('DELETE FROM guests WHERE id = ?', [id]);
         return result.affectedRows > 0;
     }
 
+    // ============================================
+    // INCREMENT GUEST STAYS
+    // ============================================
     static async incrementStays(id) {
         await pool.execute(
             'UPDATE guests SET total_stays = total_stays + 1 WHERE id = ?',
@@ -172,11 +192,85 @@ class Guest {
         );
     }
 
+    // ============================================
+    // UPDATE GUEST SPENDING
+    // ============================================
     static async updateSpent(id, amount) {
         await pool.execute(
             'UPDATE guests SET total_spent = total_spent + ? WHERE id = ?',
             [amount, id]
         );
+    }
+
+    // ============================================
+    // ✅ NEW: UPDATE GUEST PASSWORD (For Guest Login)
+    // ============================================
+    static async updatePassword(id, hashedPassword) {
+        await pool.execute(
+            'UPDATE guests SET password = ? WHERE id = ?',
+            [hashedPassword, id]
+        );
+        return this.findById(id);
+    }
+
+    // ============================================
+    // ✅ NEW: GET GUEST RESERVATIONS (For Guest Dashboard)
+    // ============================================
+    static async getReservations(guestId) {
+        const [rows] = await pool.execute(`
+            SELECT 
+                r.*, 
+                rm.room_number, 
+                rm.room_type_id, 
+                rt.name as room_type_name
+            FROM reservations r
+            LEFT JOIN rooms rm ON r.room_id = rm.id
+            LEFT JOIN room_types rt ON rm.room_type_id = rt.id
+            WHERE r.guest_id = ?
+            ORDER BY r.check_in_date DESC
+        `, [guestId]);
+        return rows;
+    }
+
+    // ============================================
+    // ✅ NEW: GET GUEST INVOICES (For Guest Dashboard)
+    // ============================================
+    static async getInvoices(guestId) {
+        const [rows] = await pool.execute(`
+            SELECT 
+                i.*,
+                r.reservation_number,
+                rm.room_number
+            FROM invoices i
+            LEFT JOIN reservations r ON i.reservation_id = r.id
+            LEFT JOIN rooms rm ON r.room_id = rm.id
+            WHERE i.guest_id = ?
+            ORDER BY i.created_at DESC
+        `, [guestId]);
+        return rows;
+    }
+
+    // ============================================
+    // ✅ NEW: CHECK IF GUEST HAS PASSWORD (For Guest Login)
+    // ============================================
+    static async hasPassword(id) {
+        const [rows] = await pool.execute(
+            'SELECT password FROM guests WHERE id = ?',
+            [id]
+        );
+        return rows[0]?.password !== null && rows[0]?.password !== undefined;
+    }
+
+    // ============================================
+    // ✅ NEW: GET GUEST BY EMAIL WITH PASSWORD (For Authentication)
+    // ============================================
+    static async findByEmailWithPassword(email) {
+        if (!email) return null;
+        const [rows] = await pool.execute(
+            'SELECT * FROM guests WHERE email = ?',
+            [email]
+        );
+        return rows[0];
     }
 }
 

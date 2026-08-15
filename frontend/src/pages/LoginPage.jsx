@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import toast from 'react-hot-toast';
-import { FaUser, FaLock, FaHotel } from 'react-icons/fa';
+import { FaUser, FaLock, FaHotel, FaUserFriends } from 'react-icons/fa';
 
 const LoginPage = () => {
   const [email, setEmail] = useState('');
@@ -13,18 +13,25 @@ const LoginPage = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
-    if (!email || !password) {
+
+    // ✅ Trim inputs to remove accidental spaces
+    const trimmedEmail = email.trim();
+    const trimmedPassword = password.trim();
+
+    console.log('🔍 LoginPage submitting:', { trimmedEmail, trimmedPassword });
+
+    if (!trimmedEmail || !trimmedPassword) {
       toast.error('Please fill in all fields');
       return;
     }
 
     setLoading(true);
     try {
-      await login(email, password);
+      await login(trimmedEmail, trimmedPassword);
       toast.success('Login successful!');
       navigate('/');
     } catch (error) {
+      console.error('❌ LoginPage error:', error);
       toast.error(error.message || 'Login failed. Please try again.');
     } finally {
       setLoading(false);
@@ -44,7 +51,7 @@ const LoginPage = () => {
             Hotel Management System
           </h2>
           <p className="mt-2 text-sm text-gray-600">
-            Sign in to your account
+            Staff Login
           </p>
         </div>
 
@@ -148,6 +155,23 @@ const LoginPage = () => {
             </div>
           </div>
         </form>
+
+        {/* Guest Login Link */}
+        <div className="mt-6 pt-6 border-t border-gray-200">
+          <div className="flex items-center justify-center gap-2 text-sm text-gray-600">
+            <FaUserFriends className="h-4 w-4" />
+            <span>Are you a guest?</span>
+            <Link
+              to="/guest/login"
+              className="font-medium text-primary-600 hover:text-primary-700 hover:underline transition-colors"
+            >
+              Login here
+            </Link>
+          </div>
+          <p className="mt-1 text-center text-xs text-gray-500">
+            Access your reservations and invoices
+          </p>
+        </div>
       </div>
     </div>
   );

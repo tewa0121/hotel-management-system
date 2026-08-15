@@ -11,16 +11,20 @@ import RoomsPage from './pages/RoomsPage';
 import ReservationsPage from './pages/ReservationsPage';
 import PaymentsPage from './pages/PaymentsPage';
 import InvoicesPage from './pages/InvoicesPage';
-import ExpensesPage from './pages/ExpensesPage'; // ✅ ADDED
+import ExpensesPage from './pages/ExpensesPage';
 import HousekeepingPage from './pages/HousekeepingPage';
 import MaintenancePage from './pages/MaintenancePage';
 import ReportsPage from './pages/ReportsPage';
 import SettingsPage from './pages/SettingsPage';
 
+// ✅ New guest pages
+import GuestLoginPage from './pages/GuestLoginPage';
+import GuestDashboardPage from './pages/GuestDashboardPage';
+
 // Layout Component
 import Layout from './components/common/Layout';
 
-// Protected Route Component
+// Protected Route Component (for staff)
 const ProtectedRoute = ({ children }) => {
   const { isAuthenticated, loading } = useAuth();
   
@@ -75,7 +79,11 @@ function App() {
             {/* Public Routes */}
             <Route path="/login" element={<LoginPage />} />
             
-            {/* Protected Routes */}
+            {/* ✅ Guest Routes (public – no staff auth required) */}
+            <Route path="/guest/login" element={<GuestLoginPage />} />
+            <Route path="/guest/dashboard" element={<GuestDashboardPage />} />
+            
+            {/* Protected Routes (staff only) */}
             <Route path="/" element={
               <ProtectedRoute>
                 <Layout>
@@ -124,7 +132,7 @@ function App() {
               </ProtectedRoute>
             } />
             
-            <Route path="/expenses" element={  // ✅ ADDED
+            <Route path="/expenses" element={
               <ProtectedRoute>
                 <Layout>
                   <ExpensesPage />

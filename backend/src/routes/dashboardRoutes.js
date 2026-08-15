@@ -4,70 +4,47 @@ const { verifyToken } = require('../middleware/auth');
 
 const router = express.Router();
 
-// Get dashboard stats
+// ============================================
+// DASHBOARD STATS
+// ============================================
 router.get('/stats', verifyToken, async (req, res) => {
   try {
-    // Total rooms
     const [totalRooms] = await pool.execute(
       'SELECT COUNT(*) as total FROM rooms WHERE is_active = TRUE'
     );
-
-    // Available rooms
     const [availableRooms] = await pool.execute(
       'SELECT COUNT(*) as available FROM rooms WHERE status = "available" AND is_active = TRUE'
     );
-
-    // Occupied rooms
     const [occupiedRooms] = await pool.execute(
       'SELECT COUNT(*) as occupied FROM rooms WHERE status = "occupied" AND is_active = TRUE'
     );
-
-    // Reserved rooms
     const [reservedRooms] = await pool.execute(
       'SELECT COUNT(*) as reserved FROM rooms WHERE status = "reserved" AND is_active = TRUE'
     );
-
-    // Dirty rooms
     const [dirtyRooms] = await pool.execute(
       'SELECT COUNT(*) as dirty FROM rooms WHERE housekeeping_status = "dirty"'
     );
-
-    // Today's arrivals
     const [todayArrivals] = await pool.execute(
       'SELECT COUNT(*) as arrivals FROM reservations WHERE check_in_date = CURDATE() AND reservation_status IN ("confirmed", "checked_in")'
     );
-
-    // Today's departures
     const [todayDepartures] = await pool.execute(
       'SELECT COUNT(*) as departures FROM reservations WHERE check_out_date = CURDATE() AND reservation_status = "checked_in"'
     );
-
-    // Current guests (checked in)
     const [currentGuests] = await pool.execute(
       'SELECT COUNT(DISTINCT guest_id) as guests FROM reservations WHERE reservation_status = "checked_in"'
     );
-
-    // Today's revenue
     const [todayRevenue] = await pool.execute(
-      'SELECT SUM(amount) as revenue FROM payments WHERE DATE(created_at) = CURDATE() AND status = "completed"'
+      'SELECT COALESCE(SUM(amount), 0) as revenue FROM payments WHERE DATE(created_at) = CURDATE() AND status = "completed"'
     );
-
-    // Monthly revenue
     const [monthlyRevenue] = await pool.execute(
-      'SELECT SUM(amount) as revenue FROM payments WHERE MONTH(created_at) = MONTH(CURDATE()) AND YEAR(created_at) = YEAR(CURDATE()) AND status = "completed"'
+      'SELECT COALESCE(SUM(amount), 0) as revenue FROM payments WHERE MONTH(created_at) = MONTH(CURDATE()) AND YEAR(created_at) = YEAR(CURDATE()) AND status = "completed"'
     );
-
-    // Total guests (all time)
     const [totalGuests] = await pool.execute(
       'SELECT COUNT(*) as total FROM guests'
     );
-
-    // Outstanding payments
     const [outstanding] = await pool.execute(
-      'SELECT SUM(balance) as total FROM reservations WHERE balance > 0 AND reservation_status IN ("confirmed", "checked_in")'
+      'SELECT COALESCE(SUM(balance), 0) as total FROM reservations WHERE balance > 0 AND reservation_status IN ("confirmed", "checked_in")'
     );
-
-    // Get room status counts for more detailed stats
     const [roomStatus] = await pool.execute(`
       SELECT status, COUNT(*) as count 
       FROM rooms 
@@ -108,7 +85,9 @@ router.get('/stats', verifyToken, async (req, res) => {
   }
 });
 
-// Get occupancy data for chart
+// ============================================
+// OCCUPANCY DATA FOR CHART
+// ============================================
 router.get('/occupancy', verifyToken, async (req, res) => {
   try {
     const days = parseInt(req.query.days) || 30;
@@ -139,7 +118,9 @@ router.get('/occupancy', verifyToken, async (req, res) => {
   }
 });
 
-// ✅ COMPLETELY FIXED: Get revenue data for chart
+// ============================================
+// REVENUE DATA FOR CHART – FIXED GROUP BY
+// ============================================
 router.get('/revenue', verifyToken, async (req, res) => {
   try {
     const period = req.query.period || 'monthly';
@@ -157,7 +138,7 @@ router.get('/revenue', verifyToken, async (req, res) => {
         ORDER BY created_at ASC
       `;
     } else {
-      // ✅ FIXED: Proper GROUP BY for MySQL with ONLY_FULL_GROUP_BY
+      // ✅ FIX: Group by the formatted label to avoid ONLY_FULL_GROUP_BY error
       query = `
         SELECT 
           DATE_FORMAT(created_at, '%b %Y') as label,
@@ -165,8 +146,8 @@ router.get('/revenue', verifyToken, async (req, res) => {
         FROM payments
         WHERE status = 'completed'
         AND YEAR(created_at) = YEAR(CURDATE())
-        GROUP BY YEAR(created_at), MONTH(created_at)
-        ORDER BY YEAR(created_at) ASC, MONTH(created_at) ASC
+        GROUP BY DATE_FORMAT(created_at, '%b %Y')
+        ORDER BY MIN(created_at) ASC
       `;
     }
 
@@ -177,7 +158,7 @@ router.get('/revenue', verifyToken, async (req, res) => {
       const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
       const currentMonth = new Date().getMonth();
       const sampleData = months.slice(0, currentMonth + 1).map(month => ({
-        label: month,
+        label: month + ' ' + new Date().getFullYear(),
         revenue: Math.floor(Math.random() * 5000) + 1000
       }));
       return res.json({
@@ -192,10 +173,10 @@ router.get('/revenue', verifyToken, async (req, res) => {
     });
   } catch (error) {
     console.error('Error fetching revenue data:', error);
-    // Return sample data instead of error
+    // Return fallback sample data
     const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'];
     const sampleData = months.map(month => ({
-      label: month,
+      label: month + ' ' + new Date().getFullYear(),
       revenue: Math.floor(Math.random() * 5000) + 1000
     }));
     res.json({
@@ -205,7 +186,9 @@ router.get('/revenue', verifyToken, async (req, res) => {
   }
 });
 
-// Get payment method breakdown
+// ============================================
+// PAYMENT BREAKDOWN
+// ============================================
 router.get('/payment-breakdown', verifyToken, async (req, res) => {
   try {
     const [data] = await pool.execute(`
@@ -218,7 +201,6 @@ router.get('/payment-breakdown', verifyToken, async (req, res) => {
       GROUP BY payment_method
     `);
 
-    // If no data, return sample data
     if (!data || data.length === 0) {
       return res.json({
         success: true,
@@ -247,12 +229,13 @@ router.get('/payment-breakdown', verifyToken, async (req, res) => {
   }
 });
 
-// Get recent activity
+// ============================================
+// RECENT ACTIVITY
+// ============================================
 router.get('/recent-activity', verifyToken, async (req, res) => {
   try {
     const limit = parseInt(req.query.limit) || 10;
 
-    // Recent reservations
     const [recentReservations] = await pool.execute(`
       SELECT 
         'reservation' as type,
@@ -269,7 +252,6 @@ router.get('/recent-activity', verifyToken, async (req, res) => {
       LIMIT ?
     `, [limit]);
 
-    // Recent payments
     const [recentPayments] = await pool.execute(`
       SELECT 
         'payment' as type,
@@ -285,7 +267,6 @@ router.get('/recent-activity', verifyToken, async (req, res) => {
       LIMIT ?
     `, [limit]);
 
-    // Combine and sort
     const activities = [...recentReservations, ...recentPayments]
       .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
       .slice(0, limit);
