@@ -1,122 +1,261 @@
-// ============================================
-// EMAIL UTILITIES
-// ============================================
+const nodemailer = require('nodemailer');
+const dotenv = require('dotenv');
 
-// Note: This is a placeholder for email functionality
-// You can integrate with services like Nodemailer, SendGrid, etc.
+dotenv.config();
 
-// Send email
+// ============================================
+// CREATE TRANSPORTER
+// ============================================
+const transporter = nodemailer.createTransport({
+    host: process.env.EMAIL_HOST || 'smtp.gmail.com',
+    port: parseInt(process.env.EMAIL_PORT) || 587,
+    secure: false,
+    auth: {
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_PASS
+    }
+});
+
+// ============================================
+// SEND EMAIL FUNCTION - ✅ EXPORTED
+// ============================================
 const sendEmail = async (to, subject, html, text = '') => {
-  try {
-    // TODO: Implement actual email sending
-    // Example with Nodemailer:
-    // const transporter = nodemailer.createTransport({...});
-    // await transporter.sendMail({ to, subject, html, text });
-    
-    console.log(`📧 Email would be sent to: ${to}`);
-    console.log(`📝 Subject: ${subject}`);
-    console.log(`📄 Content: ${text || html}`);
+    try {
+        const mailOptions = {
+            from: process.env.EMAIL_FROM || 'Hotel Management System <noreply@hotel.com>',
+            to,
+            subject,
+            html,
+            text: text || html.replace(/<[^>]*>/g, '')
+        };
 
-    return {
-      success: true,
-      message: 'Email sent successfully',
-      to,
-      subject
-    };
-  } catch (error) {
-    console.error('Email error:', error);
-    return {
-      success: false,
-      message: 'Failed to send email',
-      error: error.message
-    };
-  }
+        const info = await transporter.sendMail(mailOptions);
+        console.log('📧 Email sent:', info.messageId);
+        return { success: true, messageId: info.messageId };
+    } catch (error) {
+        console.error('❌ Email error:', error);
+        return { success: false, error: error.message };
+    }
 };
 
-// Send welcome email to new user
-const sendWelcomeEmail = async (email, name, password) => {
-  const subject = 'Welcome to Hotel Management System';
-  const html = `
-    <h1>Welcome ${name}!</h1>
-    <p>Your account has been created successfully.</p>
-    <p><strong>Email:</strong> ${email}</p>
-    <p><strong>Password:</strong> ${password}</p>
-    <p>Please change your password after first login.</p>
-    <p>Thank you,<br>Hotel Management Team</p>
-  `;
-  const text = `Welcome ${name}!\nYour account has been created.\nEmail: ${email}\nPassword: ${password}\nPlease change your password after first login.\nThank you,\nHotel Management Team`;
-  return sendEmail(email, subject, html, text);
+// ============================================
+// EMAIL TEMPLATES
+// ============================================
+const templates = {
+    // 1. Reservation Confirmation
+    reservationConfirmation: (guestName, reservation, hotelName = 'Hotel Management System') => {
+        return `
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background: #f9fafb; border-radius: 10px;">
+                <div style="text-align: center; padding: 20px; background: #1e3a8a; border-radius: 10px 10px 0 0;">
+                    <h1 style="color: white; margin: 0;">🏨 ${hotelName}</h1>
+                </div>
+                <div style="padding: 20px; background: white; border-radius: 0 0 10px 10px;">
+                    <h2 style="color: #1e3a8a;">Reservation Confirmed! ✅</h2>
+                    <p>Dear <strong>${guestName}</strong>,</p>
+                    <p>Your reservation has been confirmed. Here are the details:</p>
+                    
+                    <div style="background: #f3f4f6; padding: 15px; border-radius: 8px; margin: 15px 0;">
+                        <p><strong>Reservation Number:</strong> ${reservation.reservation_number}</p>
+                        <p><strong>Check-in:</strong> ${reservation.check_in_date}</p>
+                        <p><strong>Check-out:</strong> ${reservation.check_out_date}</p>
+                        <p><strong>Room:</strong> ${reservation.room_number}</p>
+                        <p><strong>Total Amount:</strong> $${reservation.total_amount}</p>
+                    </div>
+                    
+                    <p>We look forward to welcoming you!</p>
+                    <p style="color: #6b7280; font-size: 12px;">If you have any questions, please contact us.</p>
+                </div>
+                <div style="text-align: center; padding: 10px; color: #6b7280; font-size: 12px;">
+                    © ${new Date().getFullYear()} ${hotelName}. All rights reserved.
+                </div>
+            </div>
+        `;
+    },
+
+    // 2. Check-in Confirmation
+    checkInConfirmation: (guestName, reservation, hotelName = 'Hotel Management System') => {
+        return `
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background: #f9fafb; border-radius: 10px;">
+                <div style="text-align: center; padding: 20px; background: #059669; border-radius: 10px 10px 0 0;">
+                    <h1 style="color: white; margin: 0;">🏨 ${hotelName}</h1>
+                </div>
+                <div style="padding: 20px; background: white; border-radius: 0 0 10px 10px;">
+                    <h2 style="color: #059669;">Welcome! You're Checked In 🎉</h2>
+                    <p>Dear <strong>${guestName}</strong>,</p>
+                    <p>You have successfully checked in. Here are your details:</p>
+                    
+                    <div style="background: #f3f4f6; padding: 15px; border-radius: 8px; margin: 15px 0;">
+                        <p><strong>Room:</strong> ${reservation.room_number}</p>
+                        <p><strong>Check-out:</strong> ${reservation.check_out_date}</p>
+                        <p><strong>Reservation:</strong> ${reservation.reservation_number}</p>
+                    </div>
+                    
+                    <p>Enjoy your stay with us!</p>
+                    <p style="color: #6b7280; font-size: 12px;">24/7 Reception available for any assistance.</p>
+                </div>
+                <div style="text-align: center; padding: 10px; color: #6b7280; font-size: 12px;">
+                    © ${new Date().getFullYear()} ${hotelName}. All rights reserved.
+                </div>
+            </div>
+        `;
+    },
+
+    // 3. Check-out Confirmation
+    checkOutConfirmation: (guestName, invoice, hotelName = 'Hotel Management System') => {
+        return `
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background: #f9fafb; border-radius: 10px;">
+                <div style="text-align: center; padding: 20px; background: #1e3a8a; border-radius: 10px 10px 0 0;">
+                    <h1 style="color: white; margin: 0;">🏨 ${hotelName}</h1>
+                </div>
+                <div style="padding: 20px; background: white; border-radius: 0 0 10px 10px;">
+                    <h2 style="color: #1e3a8a;">Thank You for Staying With Us!</h2>
+                    <p>Dear <strong>${guestName}</strong>,</p>
+                    <p>Thank you for choosing us. We hope you enjoyed your stay!</p>
+                    
+                    <div style="background: #f3f4f6; padding: 15px; border-radius: 8px; margin: 15px 0;">
+                        <p><strong>Invoice Number:</strong> ${invoice.invoice_number}</p>
+                        <p><strong>Total Amount:</strong> $${invoice.total}</p>
+                        <p><strong>Paid:</strong> $${invoice.paid_amount || 0}</p>
+                        <p><strong>Balance:</strong> $${invoice.balance || 0}</p>
+                    </div>
+                    
+                    <p>We look forward to serving you again!</p>
+                </div>
+                <div style="text-align: center; padding: 10px; color: #6b7280; font-size: 12px;">
+                    © ${new Date().getFullYear()} ${hotelName}. All rights reserved.
+                </div>
+            </div>
+        `;
+    },
+
+    // 4. Invoice Email
+    invoiceEmail: (guestName, invoice, hotelName = 'Hotel Management System') => {
+        return `
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background: #f9fafb; border-radius: 10px;">
+                <div style="text-align: center; padding: 20px; background: #1e3a8a; border-radius: 10px 10px 0 0;">
+                    <h1 style="color: white; margin: 0;">🏨 ${hotelName}</h1>
+                </div>
+                <div style="padding: 20px; background: white; border-radius: 0 0 10px 10px;">
+                    <h2 style="color: #1e3a8a;">Invoice #${invoice.invoice_number}</h2>
+                    <p>Dear <strong>${guestName}</strong>,</p>
+                    <p>Please find your invoice below:</p>
+                    
+                    <div style="background: #f3f4f6; padding: 15px; border-radius: 8px; margin: 15px 0;">
+                        <p><strong>Invoice Number:</strong> ${invoice.invoice_number}</p>
+                        <p><strong>Date:</strong> ${invoice.invoice_date}</p>
+                        <p><strong>Due Date:</strong> ${invoice.due_date || 'N/A'}</p>
+                        <p><strong>Total:</strong> $${invoice.total}</p>
+                        <p><strong>Status:</strong> ${invoice.status}</p>
+                    </div>
+                    
+                    <p>Thank you for your business!</p>
+                </div>
+                <div style="text-align: center; padding: 10px; color: #6b7280; font-size: 12px;">
+                    © ${new Date().getFullYear()} ${hotelName}. All rights reserved.
+                </div>
+            </div>
+        `;
+    },
+
+    // 5. Password Reset
+    passwordReset: (email, resetToken, hotelName = 'Hotel Management System') => {
+        const resetLink = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/reset-password?token=${resetToken}`;
+        return `
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background: #f9fafb; border-radius: 10px;">
+                <div style="text-align: center; padding: 20px; background: #dc2626; border-radius: 10px 10px 0 0;">
+                    <h1 style="color: white; margin: 0;">🔐 ${hotelName}</h1>
+                </div>
+                <div style="padding: 20px; background: white; border-radius: 0 0 10px 10px;">
+                    <h2 style="color: #dc2626;">Password Reset Request</h2>
+                    <p>You requested a password reset. Click the link below:</p>
+                    
+                    <div style="text-align: center; margin: 20px 0;">
+                        <a href="${resetLink}" style="background: #dc2626; color: white; padding: 12px 30px; border-radius: 8px; text-decoration: none; display: inline-block;">
+                            Reset Password
+                        </a>
+                    </div>
+                    
+                    <p>Or copy this link: <br> <span style="color: #1e3a8a; word-break: break-all;">${resetLink}</span></p>
+                    
+                    <p style="color: #6b7280; font-size: 12px;">This link expires in 24 hours.</p>
+                </div>
+                <div style="text-align: center; padding: 10px; color: #6b7280; font-size: 12px;">
+                    © ${new Date().getFullYear()} ${hotelName}. All rights reserved.
+                </div>
+            </div>
+        `;
+    },
+
+    // 6. Welcome Email
+    welcomeEmail: (name, email, password, hotelName = 'Hotel Management System') => {
+        return `
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background: #f9fafb; border-radius: 10px;">
+                <div style="text-align: center; padding: 20px; background: #059669; border-radius: 10px 10px 0 0;">
+                    <h1 style="color: white; margin: 0;">🏨 ${hotelName}</h1>
+                </div>
+                <div style="padding: 20px; background: white; border-radius: 0 0 10px 10px;">
+                    <h2 style="color: #059669;">Welcome ${name}! 🎉</h2>
+                    <p>Your account has been created successfully.</p>
+                    
+                    <div style="background: #f3f4f6; padding: 15px; border-radius: 8px; margin: 15px 0;">
+                        <p><strong>Email:</strong> ${email}</p>
+                        <p><strong>Password:</strong> ${password}</p>
+                    </div>
+                    
+                    <p style="color: #dc2626; font-size: 12px;">Please change your password after first login.</p>
+                    <p><a href="${process.env.FRONTEND_URL || 'http://localhost:3000'}/login" style="background: #059669; color: white; padding: 10px 20px; border-radius: 8px; text-decoration: none; display: inline-block;">Login Now</a></p>
+                </div>
+                <div style="text-align: center; padding: 10px; color: #6b7280; font-size: 12px;">
+                    © ${new Date().getFullYear()} ${hotelName}. All rights reserved.
+                </div>
+            </div>
+        `;
+    }
 };
 
-// Send reservation confirmation
+// ============================================
+// SPECIFIC EMAIL FUNCTIONS - ✅ ALL EXPORTED
+// ============================================
 const sendReservationConfirmation = async (email, guestName, reservation) => {
-  const subject = `Reservation Confirmation - ${reservation.reservation_number}`;
-  const html = `
-    <h1>Reservation Confirmation</h1>
-    <p>Dear ${guestName},</p>
-    <p>Your reservation has been confirmed.</p>
-    <p><strong>Reservation Number:</strong> ${reservation.reservation_number}</p>
-    <p><strong>Check-in:</strong> ${reservation.check_in_date}</p>
-    <p><strong>Check-out:</strong> ${reservation.check_out_date}</p>
-    <p><strong>Room:</strong> ${reservation.room_number}</p>
-    <p><strong>Total Amount:</strong> $${reservation.total_amount}</p>
-    <p>Thank you for choosing us!</p>
-    <p>Hotel Management Team</p>
-  `;
-  const text = `Reservation Confirmation\n\nReservation Number: ${reservation.reservation_number}\nCheck-in: ${reservation.check_in_date}\nCheck-out: ${reservation.check_out_date}\nRoom: ${reservation.room_number}\nTotal: $${reservation.total_amount}\n\nThank you for choosing us!`;
-  return sendEmail(email, subject, html, text);
+    const html = templates.reservationConfirmation(guestName, reservation);
+    return sendEmail(email, 'Reservation Confirmed', html);
 };
 
-// Send invoice
+const sendCheckInEmail = async (email, guestName, reservation) => {
+    const html = templates.checkInConfirmation(guestName, reservation);
+    return sendEmail(email, 'Welcome - Checked In', html);
+};
+
+const sendCheckOutEmail = async (email, guestName, invoice) => {
+    const html = templates.checkOutConfirmation(guestName, invoice);
+    return sendEmail(email, 'Thank You for Staying With Us', html);
+};
+
 const sendInvoiceEmail = async (email, guestName, invoice) => {
-  const subject = `Invoice - ${invoice.invoice_number}`;
-  const html = `
-    <h1>Invoice</h1>
-    <p>Dear ${guestName},</p>
-    <p>Please find your invoice below:</p>
-    <p><strong>Invoice Number:</strong> ${invoice.invoice_number}</p>
-    <p><strong>Date:</strong> ${invoice.invoice_date}</p>
-    <p><strong>Total:</strong> $${invoice.total}</p>
-    <p><strong>Status:</strong> ${invoice.status}</p>
-    <p>Thank you for your stay!</p>
-    <p>Hotel Management Team</p>
-  `;
-  const text = `Invoice\n\nInvoice Number: ${invoice.invoice_number}\nDate: ${invoice.invoice_date}\nTotal: $${invoice.total}\nStatus: ${invoice.status}\n\nThank you for your stay!`;
-  return sendEmail(email, subject, html, text);
+    const html = templates.invoiceEmail(guestName, invoice);
+    return sendEmail(email, `Invoice #${invoice.invoice_number}`, html);
 };
 
-// Send password reset email
-const sendPasswordResetEmail = async (email, resetToken) => {
-  const subject = 'Password Reset Request';
-  const resetLink = `${process.env.FRONTEND_URL}/reset-password?token=${resetToken}`;
-  const html = `
-    <h1>Password Reset</h1>
-    <p>You requested a password reset.</p>
-    <p>Click the link below to reset your password:</p>
-    <a href="${resetLink}">${resetLink}</a>
-    <p>This link expires in 24 hours.</p>
-    <p>If you didn't request this, please ignore this email.</p>
-    <p>Hotel Management Team</p>
-  `;
-  const text = `Password Reset\n\nClick the link to reset your password: ${resetLink}\nThis link expires in 24 hours.\nIf you didn't request this, please ignore this email.`;
-  return sendEmail(email, subject, html, text);
+const sendPasswordReset = async (email, resetToken) => {
+    const html = templates.passwordReset(email, resetToken);
+    return sendEmail(email, 'Password Reset Request', html);
 };
 
-// Send notification
-const sendNotification = async (email, subject, message) => {
-  const html = `
-    <h1>Notification</h1>
-    <p>${message}</p>
-    <p>Hotel Management Team</p>
-  `;
-  return sendEmail(email, subject, html, message);
+const sendWelcomeEmail = async (email, name, password) => {
+    const html = templates.welcomeEmail(name, email, password);
+    return sendEmail(email, 'Welcome to the Hotel Management System', html);
 };
 
+// ============================================
+// ✅ EXPORT ALL FUNCTIONS
+// ============================================
 module.exports = {
-  sendEmail,
-  sendWelcomeEmail,
-  sendReservationConfirmation,
-  sendInvoiceEmail,
-  sendPasswordResetEmail,
-  sendNotification
+    sendEmail,
+    sendReservationConfirmation,
+    sendCheckInEmail,
+    sendCheckOutEmail,
+    sendInvoiceEmail,
+    sendPasswordReset,
+    sendWelcomeEmail,
+    templates
 };

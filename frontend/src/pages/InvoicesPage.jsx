@@ -13,6 +13,7 @@ import {
 } from 'react-icons/fa';
 import invoiceService from '../services/invoiceService';
 import InvoiceForm from '../components/invoices/InvoiceForm';
+import emailService from '../services/emailService';  // ✅ ADDED
 
 const InvoicesPage = () => {
   const [invoices, setInvoices] = useState([]);
@@ -55,15 +56,17 @@ const InvoicesPage = () => {
     }
   };
 
+  // ✅ UPDATED: Send Invoice Email using emailService
   const handleSendEmail = async (id) => {
-    const email = prompt('Enter email address to send invoice:');
-    if (!email) return;
+    if (!window.confirm('Send invoice email to guest?')) return;
     
     try {
-      await invoiceService.sendInvoiceEmail(id, email);
-      toast.success(`Invoice sent to ${email}`);
+      await emailService.sendInvoiceEmail(id);
+      toast.success('✅ Invoice email sent successfully!');
+      fetchInvoices(); // Refresh to update status
     } catch (error) {
-      toast.error('Failed to send invoice');
+      toast.error('Failed to send invoice email');
+      console.error('Error:', error);
     }
   };
 
@@ -91,7 +94,7 @@ const InvoicesPage = () => {
     return matchSearch;
   });
 
-  // ✅ FIXED: Convert to number before using toFixed
+  // Format currency helper
   const formatCurrency = (value) => {
     const num = Number(value) || 0;
     return num.toFixed(2);
@@ -164,7 +167,6 @@ const InvoicesPage = () => {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-gray-600">Total Amount</p>
-              {/* ✅ FIXED: Use formatCurrency helper */}
               <p className="text-2xl font-bold text-primary-600">
                 ${formatCurrency(stats.totalAmount)}
               </p>
@@ -262,7 +264,6 @@ const InvoicesPage = () => {
                 {/* Amount & Actions */}
                 <div className="flex items-center gap-4">
                   <div className="text-right">
-                    {/* ✅ FIXED: Use formatCurrency helper */}
                     <p className="text-lg font-bold text-primary-600">
                       ${formatCurrency(invoice.total)}
                     </p>
@@ -290,7 +291,7 @@ const InvoicesPage = () => {
                       <button
                         onClick={() => handleSendEmail(invoice.id)}
                         className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors"
-                        title="Send Email"
+                        title="Send Invoice Email"
                       >
                         <FaEnvelope className="h-4 w-4" />
                       </button>

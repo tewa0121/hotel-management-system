@@ -18,7 +18,8 @@ const reportRoutes = require('./routes/reportRoutes');
 const invoiceRoutes = require('./routes/invoiceRoutes');
 const dashboardRoutes = require('./routes/dashboardRoutes');
 const settingsRoutes = require('./routes/settingsRoutes');
-const expenseRoutes = require('./routes/expenseRoutes'); // ✅ ADD THIS
+const expenseRoutes = require('./routes/expenseRoutes');
+const emailRoutes = require('./routes/emailRoutes'); // ✅ ADD THIS
 
 const app = express();
 
@@ -55,7 +56,8 @@ app.use('/api/reports', reportRoutes);
 app.use('/api/invoices', invoiceRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/settings', settingsRoutes);
-app.use('/api/expenses', expenseRoutes); // ✅ ADD THIS
+app.use('/api/expenses', expenseRoutes);
+app.use('/api/email', emailRoutes); // ✅ ADD THIS
 
 // Error handling middleware
 app.use(errorHandler);

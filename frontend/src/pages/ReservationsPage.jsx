@@ -12,11 +12,13 @@ import {
     FaTimesCircle,
     FaDoorOpen,
     FaDoorClosed,
-    FaCreditCard
+    FaCreditCard,
+    FaEnvelope  // ✅ ADDED
 } from 'react-icons/fa';
 import reservationService from '../services/reservationService';
 import ReservationForm from '../components/reservations/ReservationForm';
 import PaymentForm from '../components/payments/PaymentForm';
+import emailService from '../services/emailService';  // ✅ ADDED
 
 const ReservationsPage = () => {
     const [reservations, setReservations] = useState([]);
@@ -56,7 +58,7 @@ const ReservationsPage = () => {
         }
     };
 
-    // ✅ FIXED: Check-In - NO CONFIRMATION DIALOG
+    // ✅ Check-In - NO CONFIRMATION DIALOG
     const handleCheckIn = async (id) => {
         console.log('🔄 Check-in clicked for reservation ID:', id);
         
@@ -77,7 +79,7 @@ const ReservationsPage = () => {
         }
     };
 
-    // ✅ FIXED: Check-Out - NO CONFIRMATION DIALOG
+    // ✅ Check-Out - NO CONFIRMATION DIALOG
     const handleCheckOut = async (id) => {
         console.log('🔄 Check-out clicked for reservation ID:', id);
         
@@ -95,6 +97,42 @@ const ReservationsPage = () => {
         } catch (error) {
             console.error('❌ Check-out error:', error);
             toast.error(error.message || 'Failed to check out');
+        }
+    };
+
+    // ✅ NEW: Send Confirmation Email
+    const handleSendConfirmation = async (id) => {
+        if (!window.confirm('Send confirmation email to guest?')) return;
+        try {
+            await emailService.sendReservationConfirmation(id);
+            toast.success('✅ Confirmation email sent!');
+        } catch (error) {
+            toast.error('Failed to send email');
+            console.error('Error:', error);
+        }
+    };
+
+    // ✅ NEW: Send Check-in Email
+    const handleSendCheckInEmail = async (id) => {
+        if (!window.confirm('Send check-in email to guest?')) return;
+        try {
+            await emailService.sendCheckInEmail(id);
+            toast.success('✅ Check-in email sent!');
+        } catch (error) {
+            toast.error('Failed to send email');
+            console.error('Error:', error);
+        }
+    };
+
+    // ✅ NEW: Send Check-out Email
+    const handleSendCheckOutEmail = async (id) => {
+        if (!window.confirm('Send check-out email to guest?')) return;
+        try {
+            await emailService.sendCheckOutEmail(id);
+            toast.success('✅ Check-out email sent!');
+        } catch (error) {
+            toast.error('Failed to send email');
+            console.error('Error:', error);
         }
     };
 
@@ -241,8 +279,39 @@ const ReservationsPage = () => {
                                     </div>
                                 </div>
 
-                                {/* Actions - NO CONFIRMATION DIALOGS */}
+                                {/* Actions - WITH EMAIL BUTTONS */}
                                 <div className="flex items-center gap-2 flex-wrap">
+                                    {/* ✅ Email Buttons */}
+                                    {res.reservation_status === 'confirmed' && (
+                                        <button
+                                            onClick={() => handleSendConfirmation(res.id)}
+                                            className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors"
+                                            title="Send Confirmation Email"
+                                        >
+                                            <FaEnvelope className="h-4 w-4" />
+                                        </button>
+                                    )}
+
+                                    {res.reservation_status === 'checked_in' && (
+                                        <button
+                                            onClick={() => handleSendCheckInEmail(res.id)}
+                                            className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                                            title="Send Check-in Email"
+                                        >
+                                            <FaEnvelope className="h-4 w-4" />
+                                        </button>
+                                    )}
+
+                                    {res.reservation_status === 'checked_out' && (
+                                        <button
+                                            onClick={() => handleSendCheckOutEmail(res.id)}
+                                            className="p-2 text-purple-600 hover:bg-purple-50 rounded-lg transition-colors"
+                                            title="Send Check-out Email"
+                                        >
+                                            <FaEnvelope className="h-4 w-4" />
+                                        </button>
+                                    )}
+
                                     {/* Record Payment Button */}
                                     {(res.reservation_status === 'checked_in' || res.reservation_status === 'confirmed') && res.balance > 0 && (
                                         <button
@@ -257,7 +326,7 @@ const ReservationsPage = () => {
                                         </button>
                                     )}
 
-                                    {/* ✅ Check In Button - NO CONFIRMATION */}
+                                    {/* Check In Button */}
                                     {res.reservation_status === 'confirmed' && (
                                         <button
                                             onClick={() => handleCheckIn(res.id)}
@@ -268,7 +337,7 @@ const ReservationsPage = () => {
                                         </button>
                                     )}
 
-                                    {/* ✅ Check Out Button - NO CONFIRMATION */}
+                                    {/* Check Out Button */}
                                     {res.reservation_status === 'checked_in' && (
                                         <button
                                             onClick={() => handleCheckOut(res.id)}
