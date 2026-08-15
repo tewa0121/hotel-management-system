@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import toast from 'react-hot-toast';
-import { FaTimes, FaCreditCard, FaMoneyBillWave, FaUniversity, FaMobileAlt } from 'react-icons/fa';
+import { FaTimes, FaCreditCard, FaMoneyBillWave, FaUniversity, FaMobileAlt, FaSync } from 'react-icons/fa';
 import paymentService from '../../services/paymentService';
 import reservationService from '../../services/reservationService';
 
 const PaymentForm = ({ reservationId, guestId, onClose, onSuccess }) => {
   const [loading, setLoading] = useState(false);
   const [loadingData, setLoadingData] = useState(true);
+  const [loadingReservations, setLoadingReservations] = useState(false);
   const [reservations, setReservations] = useState([]);
   const [selectedReservation, setSelectedReservation] = useState(null);
   const [guestName, setGuestName] = useState('');
@@ -21,7 +22,6 @@ const PaymentForm = ({ reservationId, guestId, onClose, onSuccess }) => {
     notes: ''
   });
 
-  // Load data when component mounts
   useEffect(() => {
     fetchReservations();
     if (reservationId) {
@@ -29,14 +29,15 @@ const PaymentForm = ({ reservationId, guestId, onClose, onSuccess }) => {
     }
   }, [reservationId]);
 
+  // ✅ Fetch reservations with loading state - INCLUDES PENDING
   const fetchReservations = async () => {
+    setLoadingReservations(true);
     try {
-      setLoadingData(true);
       const response = await reservationService.getReservations(1, 100);
       
-      // ✅ SHOW ALL RESERVATIONS (not just with balance)
-      // This way users can see all reservations and record payments
+      // ✅ FIX: Include pending, confirmed, and checked_in
       const allReservations = (response.data || []).filter(r => 
+        r.reservation_status === 'pending' || 
         r.reservation_status === 'confirmed' || 
         r.reservation_status === 'checked_in'
       );
@@ -50,8 +51,18 @@ const PaymentForm = ({ reservationId, guestId, onClose, onSuccess }) => {
       console.error('Error fetching reservations:', error);
       toast.error('Failed to load reservations');
     } finally {
+      setLoadingReservations(false);
       setLoadingData(false);
     }
+  };
+
+  // ✅ Refresh reservations (called by button)
+  const refreshReservations = () => {
+    toast.promise(fetchReservations(), {
+      loading: 'Refreshing reservations...',
+      success: 'Reservations refreshed!',
+      error: 'Failed to refresh reservations'
+    });
   };
 
   const loadReservationDetails = async (id) => {
@@ -111,7 +122,6 @@ const PaymentForm = ({ reservationId, guestId, onClose, onSuccess }) => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     
-    // ✅ Validate
     if (!formData.reservation_id) {
       toast.error('Please select a reservation');
       return;
@@ -180,29 +190,48 @@ const PaymentForm = ({ reservationId, guestId, onClose, onSuccess }) => {
         </div>
 
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
-          {/* Reservation Selection */}
+          {/* Reservation Selection with Refresh Button */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Reservation <span className="text-red-500">*</span>
             </label>
-            <select
-              value={formData.reservation_id}
-              onChange={handleReservationChange}
-              className="input-field"
-              required
-            >
-              <option value="">Select Reservation</option>
-              {reservations.map((res) => (
-                <option key={res.id} value={res.id}>
-                  #{res.reservation_number} - {res.first_name} {res.last_name} 
-                  {res.balance > 0 ? ` - Balance: $${res.balance}` : ' - Paid'}
-                </option>
-              ))}
-            </select>
+            <div className="flex gap-2">
+              <select
+                value={formData.reservation_id}
+                onChange={handleReservationChange}
+                className="input-field flex-1"
+                required
+              >
+                <option value="">Select Reservation</option>
+                {reservations.map((res) => (
+                  <option key={res.id} value={res.id}>
+                    #{res.reservation_number} - {res.first_name} {res.last_name} 
+                    {res.balance > 0 ? ` - Balance: $${res.balance}` : ' - Paid'}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                onClick={refreshReservations}
+                disabled={loadingReservations}
+                className="btn-secondary px-4 flex items-center gap-2 whitespace-nowrap"
+                title="Refresh reservation list"
+              >
+                <FaSync className={`${loadingReservations ? 'animate-spin' : ''}`} />
+                <span className="hidden sm:inline">Refresh</span>
+              </button>
+            </div>
             {reservations.length === 0 && (
-              <p className="text-xs text-yellow-600 mt-1">
-                No reservations found. Please create a reservation first.
-              </p>
+              <div className="mt-1 text-xs text-yellow-600 flex items-center gap-2">
+                <span>No reservations found.</span>
+                <button
+                  type="button"
+                  onClick={refreshReservations}
+                  className="text-primary-600 hover:underline font-medium"
+                >
+                  Refresh list
+                </button>
+              </div>
             )}
           </div>
 
