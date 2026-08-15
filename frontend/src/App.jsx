@@ -17,9 +17,14 @@ import MaintenancePage from './pages/MaintenancePage';
 import ReportsPage from './pages/ReportsPage';
 import SettingsPage from './pages/SettingsPage';
 
-// ✅ New guest pages
+// Guest Pages
 import GuestLoginPage from './pages/GuestLoginPage';
 import GuestDashboardPage from './pages/GuestDashboardPage';
+
+// ✅ Food Module Pages
+import FoodMenuPage from './pages/FoodMenuPage';
+import FoodOrderPage from './pages/FoodOrderPage';
+import FoodOrdersPage from './pages/FoodOrdersPage';
 
 // Layout Component
 import Layout from './components/common/Layout';
@@ -79,7 +84,7 @@ function App() {
             {/* Public Routes */}
             <Route path="/login" element={<LoginPage />} />
             
-            {/* ✅ Guest Routes (public – no staff auth required) */}
+            {/* Guest Routes (public) */}
             <Route path="/guest/login" element={<GuestLoginPage />} />
             <Route path="/guest/dashboard" element={<GuestDashboardPage />} />
             
@@ -164,11 +169,35 @@ function App() {
               </ProtectedRoute>
             } />
             
-            {/* Settings Route - Admin only */}
             <Route path="/settings" element={
               <ProtectedRoute>
                 <Layout>
                   <SettingsPage />
+                </Layout>
+              </ProtectedRoute>
+            } />
+
+            {/* ✅ Food Module Routes */}
+            <Route path="/food/menu" element={
+              <ProtectedRoute>
+                <Layout>
+                  <FoodMenuPage />
+                </Layout>
+              </ProtectedRoute>
+            } />
+
+            <Route path="/food/place-order" element={
+              <ProtectedRoute>
+                <Layout>
+                  <FoodOrderPage />
+                </Layout>
+              </ProtectedRoute>
+            } />
+
+            <Route path="/food/orders" element={
+              <ProtectedRoute>
+                <Layout>
+                  <FoodOrdersPage />
                 </Layout>
               </ProtectedRoute>
             } />

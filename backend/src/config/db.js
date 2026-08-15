@@ -73,6 +73,8 @@ const createTables = async () => {
                 notes TEXT,
                 total_stays INT DEFAULT 0,
                 total_spent DECIMAL(10,2) DEFAULT 0.00,
+                password VARCHAR(255) NULL,
+                is_guest BOOLEAN DEFAULT TRUE,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
                 INDEX idx_email (email),
@@ -323,6 +325,88 @@ const createTables = async () => {
         `);
         console.log('✅ Audit logs table created');
 
+        // ============================================
+        // 🆕 FOOD MODULE TABLES
+        // ============================================
+
+        // 12. Food Categories Table
+        await promisePool.execute(`
+            CREATE TABLE IF NOT EXISTS food_categories (
+                id INT PRIMARY KEY AUTO_INCREMENT,
+                name VARCHAR(50) NOT NULL,
+                description TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                INDEX idx_name (name)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+        `);
+        console.log('✅ Food categories table created');
+
+        // 13. Food Items Table
+        await promisePool.execute(`
+            CREATE TABLE IF NOT EXISTS food_items (
+                id INT PRIMARY KEY AUTO_INCREMENT,
+                category_id INT,
+                name VARCHAR(100) NOT NULL,
+                description TEXT,
+                price DECIMAL(10,2) NOT NULL,
+                is_available BOOLEAN DEFAULT TRUE,
+                image_url VARCHAR(255),
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                FOREIGN KEY (category_id) REFERENCES food_categories(id) ON DELETE SET NULL,
+                INDEX idx_category (category_id),
+                INDEX idx_name (name),
+                INDEX idx_available (is_available)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+        `);
+        console.log('✅ Food items table created');
+
+        // 14. Food Orders Table
+        await promisePool.execute(`
+            CREATE TABLE IF NOT EXISTS food_orders (
+                id INT PRIMARY KEY AUTO_INCREMENT,
+                reservation_id INT NULL,
+                guest_id INT NOT NULL,
+                room_id INT NULL,
+                order_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+                status ENUM('pending', 'preparing', 'ready', 'delivered', 'cancelled') DEFAULT 'pending',
+                total_amount DECIMAL(10,2) NOT NULL,
+                notes TEXT,
+                created_by INT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                FOREIGN KEY (reservation_id) REFERENCES reservations(id) ON DELETE SET NULL,
+                FOREIGN KEY (guest_id) REFERENCES guests(id),
+                FOREIGN KEY (room_id) REFERENCES rooms(id) ON DELETE SET NULL,
+                FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL,
+                INDEX idx_reservation (reservation_id),
+                INDEX idx_guest (guest_id),
+                INDEX idx_room (room_id),
+                INDEX idx_status (status),
+                INDEX idx_order_date (order_date)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+        `);
+        console.log('✅ Food orders table created');
+
+        // 15. Food Order Items Table
+        await promisePool.execute(`
+            CREATE TABLE IF NOT EXISTS food_order_items (
+                id INT PRIMARY KEY AUTO_INCREMENT,
+                order_id INT NOT NULL,
+                food_item_id INT NOT NULL,
+                quantity INT NOT NULL CHECK (quantity > 0),
+                unit_price DECIMAL(10,2) NOT NULL,
+                subtotal DECIMAL(10,2) NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (order_id) REFERENCES food_orders(id) ON DELETE CASCADE,
+                FOREIGN KEY (food_item_id) REFERENCES food_items(id),
+                INDEX idx_order (order_id),
+                INDEX idx_item (food_item_id)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+        `);
+        console.log('✅ Food order items table created');
+
         console.log('✅ All tables created successfully!');
         return true;
     } catch (error) {
@@ -385,12 +469,10 @@ const seedData = async () => {
         types.forEach(t => roomTypeMap[t.name] = t.id);
 
         // Create rooms (30 rooms)
-        const rooms = [];
         const floors = [1, 2, 3];
         const buildings = ['Main', 'East Wing', 'West Wing'];
         const statuses = ['available', 'available', 'available', 'available', 'occupied', 'dirty', 'cleaning'];
         
-        // Assign room types to rooms
         const roomTypeAssignments = [];
         for (let i = 1; i <= 30; i++) {
             if (i <= 8) roomTypeAssignments.push('Standard Single');
@@ -430,6 +512,80 @@ const seedData = async () => {
             );
         }
         console.log('✅ Sample guests created');
+
+        // 🆕 Create food categories and items
+        const foodCategories = [
+            { name: 'Breakfast', description: 'Morning meals to start your day' },
+            { name: 'Lunch', description: 'Midday meals and snacks' },
+            { name: 'Dinner', description: 'Evening meals and full courses' },
+            { name: 'Beverages', description: 'Drinks and refreshments' },
+            { name: 'Snacks', description: 'Light bites and appetizers' },
+            { name: 'Desserts', description: 'Sweet treats and pastries' }
+        ];
+
+        const categoryIds = [];
+        for (const cat of foodCategories) {
+            const [result] = await promisePool.execute(
+                'INSERT INTO food_categories (name, description) VALUES (?, ?)',
+                [cat.name, cat.description]
+            );
+            categoryIds.push({ name: cat.name, id: result.insertId });
+        }
+
+        const getCategoryId = (name) => {
+            const found = categoryIds.find(c => c.name === name);
+            return found ? found.id : null;
+        };
+
+        const foodItems = [
+            // Breakfast
+            { category: 'Breakfast', name: 'Continental Breakfast', description: 'Fresh pastries, bread, butter, jam, coffee/tea', price: 12.00 },
+            { category: 'Breakfast', name: 'Full English Breakfast', description: 'Eggs, bacon, sausage, beans, grilled tomato, toast', price: 18.00 },
+            { category: 'Breakfast', name: 'Omelette', description: 'Three-egg omelette with your choice of fillings', price: 14.00 },
+            { category: 'Breakfast', name: 'Pancakes', description: 'Served with maple syrup and fresh berries', price: 13.00 },
+            { category: 'Breakfast', name: 'Fruit Bowl', description: 'Seasonal fresh fruits', price: 8.00 },
+            // Lunch
+            { category: 'Lunch', name: 'Club Sandwich', description: 'Triple-decker with chicken, bacon, lettuce, tomato', price: 16.00 },
+            { category: 'Lunch', name: 'Caesar Salad', description: 'Romaine lettuce, parmesan, croutons, Caesar dressing', price: 14.00 },
+            { category: 'Lunch', name: 'Burger', description: 'Beef patty with lettuce, tomato, onion, cheese', price: 17.00 },
+            { category: 'Lunch', name: 'Pasta', description: 'Choice of sauce with fresh pasta', price: 18.00 },
+            { category: 'Lunch', name: 'Soup of the Day', description: 'Homemade soup with bread', price: 10.00 },
+            // Dinner
+            { category: 'Dinner', name: 'Grilled Salmon', description: 'Served with vegetables and rice', price: 28.00 },
+            { category: 'Dinner', name: 'Steak', description: 'Grilled steak with mashed potatoes and vegetables', price: 35.00 },
+            { category: 'Dinner', name: 'Chicken Breast', description: 'Grilled chicken with herbs and vegetables', price: 24.00 },
+            { category: 'Dinner', name: 'Vegetarian Pasta', description: 'Fresh pasta with vegetables and pesto', price: 20.00 },
+            { category: 'Dinner', name: 'Seafood Platter', description: 'Assorted seafood with dipping sauce', price: 32.00 },
+            // Beverages
+            { category: 'Beverages', name: 'Coffee', description: 'Freshly brewed coffee', price: 4.00 },
+            { category: 'Beverages', name: 'Tea', description: 'Selection of teas', price: 3.50 },
+            { category: 'Beverages', name: 'Fresh Juice', description: 'Orange, apple, or mango', price: 5.00 },
+            { category: 'Beverages', name: 'Soft Drink', description: 'Coca-cola, Sprite, Fanta', price: 3.00 },
+            { category: 'Beverages', name: 'Smoothie', description: 'Mixed fruit smoothie', price: 6.00 },
+            // Snacks
+            { category: 'Snacks', name: 'French Fries', description: 'Crispy golden fries', price: 6.00 },
+            { category: 'Snacks', name: 'Onion Rings', description: 'Crispy onion rings with dip', price: 7.00 },
+            { category: 'Snacks', name: 'Nachos', description: 'Tortilla chips with cheese and salsa', price: 10.00 },
+            { category: 'Snacks', name: 'Spring Rolls', description: 'Vegetable spring rolls with sweet chili sauce', price: 9.00 },
+            { category: 'Snacks', name: 'Cheese Platter', description: 'Selection of cheeses with crackers', price: 15.00 },
+            // Desserts
+            { category: 'Desserts', name: 'Chocolate Cake', description: 'Rich chocolate cake with ganache', price: 8.00 },
+            { category: 'Desserts', name: 'Cheesecake', description: 'New York style cheesecake', price: 8.50 },
+            { category: 'Desserts', name: 'Ice Cream', description: 'Vanilla, chocolate, or strawberry', price: 6.00 },
+            { category: 'Desserts', name: 'Fruit Tart', description: 'Fresh fruit tart with custard', price: 9.00 },
+            { category: 'Desserts', name: 'Tiramisu', description: 'Italian coffee-flavored dessert', price: 9.50 }
+        ];
+
+        for (const item of foodItems) {
+            const catId = getCategoryId(item.category);
+            if (catId) {
+                await promisePool.execute(
+                    'INSERT INTO food_items (category_id, name, description, price, is_available) VALUES (?, ?, ?, ?, ?)',
+                    [catId, item.name, item.description, item.price, 1]
+                );
+            }
+        }
+        console.log('✅ Food categories and items created');
 
         console.log('✅ Seed data completed successfully!');
         return true;

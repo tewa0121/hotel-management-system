@@ -151,6 +151,25 @@ const Footer = () => {
                                     Reports
                                 </a>
                             </li>
+                            {/* ✅ Food Module Links */}
+                            <li>
+                                <a href="/food/menu" className="text-gray-400 hover:text-primary-400 transition-colors flex items-center gap-2 group">
+                                    <span className="w-1 h-1 bg-primary-500 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"></span>
+                                    Food Menu
+                                </a>
+                            </li>
+                            <li>
+                                <a href="/food/place-order" className="text-gray-400 hover:text-primary-400 transition-colors flex items-center gap-2 group">
+                                    <span className="w-1 h-1 bg-primary-500 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"></span>
+                                    Place Order
+                                </a>
+                            </li>
+                            <li>
+                                <a href="/food/orders" className="text-gray-400 hover:text-primary-400 transition-colors flex items-center gap-2 group">
+                                    <span className="w-1 h-1 bg-primary-500 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"></span>
+                                    Food Orders
+                                </a>
+                            </li>
                         </ul>
                     </div>
 

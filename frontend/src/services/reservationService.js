@@ -58,7 +58,7 @@ const reservationService = {
         }
     },
 
-    // ✅ Cancel reservation
+    // Cancel reservation
     async cancelReservation(id) {
         try {
             const response = await api.post(`/reservations/${id}/cancel`);
@@ -68,7 +68,7 @@ const reservationService = {
         }
     },
 
-    // ✅ Check-in
+    // Check-in
     async checkIn(id) {
         try {
             console.log(`📤 checkIn service called for ${id}`);
@@ -81,7 +81,7 @@ const reservationService = {
         }
     },
 
-    // ✅ Check-out
+    // Check-out
     async checkOut(id) {
         try {
             console.log(`📤 checkOut service called for ${id}`);
@@ -90,6 +90,16 @@ const reservationService = {
             return response.data;
         } catch (error) {
             console.error(`❌ checkOut error:`, error);
+            throw error.response?.data || error.message;
+        }
+    },
+
+    // ✅ NEW: Get reservations by guest ID (for Food Module)
+    async getReservationsByGuest(guestId) {
+        try {
+            const response = await api.get(`/reservations/guest/${guestId}`);
+            return response.data;
+        } catch (error) {
             throw error.response?.data || error.message;
         }
     }

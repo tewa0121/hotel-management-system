@@ -39,6 +39,37 @@ router.get('/', verifyToken, async (req, res) => {
 });
 
 // ============================================
+// ✅ NEW: GET reservations by guest ID (for Food Module)
+// ============================================
+router.get('/guest/:guestId', verifyToken, async (req, res) => {
+    try {
+        const [reservations] = await pool.execute(
+            `SELECT r.*, 
+                    rm.room_number, 
+                    rm.status as room_status,
+                    rt.name as room_type_name
+             FROM reservations r
+             LEFT JOIN rooms rm ON r.room_id = rm.id
+             LEFT JOIN room_types rt ON rm.room_type_id = rt.id
+             WHERE r.guest_id = ?
+             ORDER BY r.check_in_date DESC`,
+            [req.params.guestId]
+        );
+
+        res.json({
+            success: true,
+            data: reservations
+        });
+    } catch (error) {
+        console.error('Error fetching guest reservations:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error fetching guest reservations'
+        });
+    }
+});
+
+// ============================================
 // POST check available rooms
 // ============================================
 router.post('/available-rooms', verifyToken, async (req, res) => {

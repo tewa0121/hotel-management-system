@@ -16,7 +16,11 @@ import {
   FaHotel,
   FaUserCircle,
   FaFileInvoice,
-  FaMoneyBillWave  // ✅ ADDED for Expenses
+  FaMoneyBillWave,
+  // ✅ Food Module Icons
+  FaUtensils,
+  FaShoppingCart,
+  FaList
 } from 'react-icons/fa';
 
 const Sidebar = () => {
@@ -30,7 +34,11 @@ const Sidebar = () => {
     { path: '/reservations', icon: FaCalendarCheck, label: 'Reservations' },
     { path: '/payments', icon: FaCreditCard, label: 'Payments' },
     { path: '/invoices', icon: FaFileInvoice, label: 'Invoices' },
-    { path: '/expenses', icon: FaMoneyBillWave, label: 'Expenses' },  // ✅ ADDED
+    { path: '/expenses', icon: FaMoneyBillWave, label: 'Expenses' },
+    // ✅ Food Module Links
+    { path: '/food/menu', icon: FaUtensils, label: 'Menu' },
+    { path: '/food/place-order', icon: FaShoppingCart, label: 'Place Order' },
+    { path: '/food/orders', icon: FaList, label: 'Food Orders' },
     { path: '/housekeeping', icon: FaBroom, label: 'Housekeeping' },
     { path: '/maintenance', icon: FaTools, label: 'Maintenance' },
     { path: '/reports', icon: FaChartBar, label: 'Reports' },
