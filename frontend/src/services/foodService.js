@@ -44,6 +44,11 @@ const foodService = {
     },
     deleteOrder(id) {
         return api.delete(`/food/orders/${id}`).then(res => res.data);
+    },
+
+    // ✅ NEW: Get food stats for dashboard
+    getStats() {
+        return api.get('/food/stats').then(res => res.data);
     }
 };
 

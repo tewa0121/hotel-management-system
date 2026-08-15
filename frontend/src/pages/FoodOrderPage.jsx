@@ -106,13 +106,21 @@ const FoodOrderPage = () => {
 
     const totalAmount = cart.reduce((sum, item) => sum + item.unit_price * item.quantity, 0);
 
+    // ✅ UPDATED: Enhanced with debug logs
     const handleSubmitOrder = async () => {
+        console.log('🔄 Place Order clicked');
+        console.log('✅ Selected guest:', selectedGuest);
+        console.log('✅ Cart:', cart);
+        console.log('✅ Selected reservation:', selectedReservation);
+
         if (!selectedGuest) {
             toast.error('Please select a guest');
+            console.log('❌ No guest selected');
             return;
         }
         if (cart.length === 0) {
             toast.error('Cart is empty');
+            console.log('❌ Cart is empty');
             return;
         }
 
@@ -128,19 +136,26 @@ const FoodOrderPage = () => {
             }))
         };
 
+        console.log('📤 Sending order data:', JSON.stringify(orderData, null, 2));
+
         setSubmitting(true);
         try {
             const res = await foodService.createOrder(orderData);
-            if (res.success) {
-                toast.success('Order placed successfully!');
+            console.log('📥 Response from server:', res);
+            
+            if (res && res.success) {
+                toast.success('✅ Order placed successfully!');
                 setCart([]);
                 setNotes('');
                 setSelectedReservation(null);
             } else {
-                toast.error(res.message || 'Failed to place order');
+                console.error('❌ Server returned error:', res);
+                toast.error(res?.message || 'Failed to place order');
             }
         } catch (error) {
-            toast.error(error.message || 'Failed to place order');
+            console.error('❌ Error placing order:', error);
+            console.error('❌ Error details:', error.response?.data || error.message);
+            toast.error(error.response?.data?.message || error.message || 'Failed to place order');
         } finally {
             setSubmitting(false);
         }

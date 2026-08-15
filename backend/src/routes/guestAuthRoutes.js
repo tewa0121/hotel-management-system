@@ -183,6 +183,53 @@ router.get('/invoices', verifyToken, async (req, res) => {
 });
 
 // ============================================
+// ✅ NEW: GET GUEST FOOD ORDERS
+// ============================================
+router.get('/food-orders', verifyToken, async (req, res) => {
+    try {
+        console.log('🔍 Guest food orders request - User ID:', req.user.id);
+        
+        const [orders] = await pool.execute(`
+            SELECT fo.*, 
+                   COUNT(foi.id) as item_count,
+                   GROUP_CONCAT(fi.name SEPARATOR ', ') as item_names
+            FROM food_orders fo
+            LEFT JOIN food_order_items foi ON fo.id = foi.order_id
+            LEFT JOIN food_items fi ON foi.food_item_id = fi.id
+            WHERE fo.guest_id = ?
+            GROUP BY fo.id
+            ORDER BY fo.created_at DESC
+        `, [req.user.id]);
+
+        // Get items for each order
+        for (let order of orders) {
+            const [items] = await pool.execute(`
+                SELECT foi.*, fi.name as item_name
+                FROM food_order_items foi
+                JOIN food_items fi ON foi.food_item_id = fi.id
+                WHERE foi.order_id = ?
+            `, [order.id]);
+            order.items = items;
+        }
+
+        console.log('🔍 Food orders found:', orders.length);
+
+        res.json({
+            success: true,
+            data: orders
+        });
+    } catch (error) {
+        console.error('❌ Error fetching guest food orders:', error);
+        console.error('❌ Stack:', error.stack);
+        res.status(500).json({
+            success: false,
+            message: 'Error fetching food orders',
+            error: error.message
+        });
+    }
+});
+
+// ============================================
 // UPDATE GUEST PROFILE
 // ============================================
 router.put('/profile', verifyToken, async (req, res) => {

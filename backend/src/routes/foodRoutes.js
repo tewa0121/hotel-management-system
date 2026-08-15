@@ -1,4 +1,5 @@
 const express = require('express');
+const { pool } = require('../config/db');
 const { verifyToken, authorize } = require('../middleware/auth');
 const FoodCategory = require('../models/FoodCategory');
 const FoodItem = require('../models/FoodItem');
@@ -131,7 +132,6 @@ router.get('/orders/:id', verifyToken, async (req, res) => {
     }
 });
 
-// Create order (staff or guest)
 router.post('/orders', verifyToken, async (req, res) => {
     try {
         const { reservation_id, guest_id, room_id, notes, items } = req.body;
@@ -199,6 +199,62 @@ router.delete('/orders/:id', verifyToken, authorize('admin', 'manager'), async (
     } catch (error) {
         console.error('Error cancelling order:', error);
         res.status(500).json({ success: false, message: 'Error cancelling order' });
+    }
+});
+
+// ============================================
+// ✅ FOOD STATS FOR DASHBOARD (with monthlyRevenue)
+// ============================================
+router.get('/stats', verifyToken, async (req, res) => {
+    try {
+        // Total orders (all time)
+        const [totalOrders] = await pool.execute(
+            'SELECT COUNT(*) as total FROM food_orders'
+        );
+
+        // Total revenue (all time, exclude cancelled)
+        const [totalRevenue] = await pool.execute(
+            'SELECT COALESCE(SUM(total_amount), 0) as total FROM food_orders WHERE status != "cancelled"'
+        );
+
+        // ✅ Monthly revenue (current month)
+        const [monthlyRevenue] = await pool.execute(`
+            SELECT COALESCE(SUM(total_amount), 0) as total 
+            FROM food_orders 
+            WHERE status != "cancelled" 
+            AND MONTH(order_date) = MONTH(CURDATE()) 
+            AND YEAR(order_date) = YEAR(CURDATE())
+        `);
+
+        // Orders by status
+        const [byStatus] = await pool.execute(`
+            SELECT status, COUNT(*) as count 
+            FROM food_orders 
+            GROUP BY status
+        `);
+
+        // Recent orders (last 7 days)
+        const [recentOrders] = await pool.execute(`
+            SELECT DATE(order_date) as date, COUNT(*) as count, SUM(total_amount) as revenue
+            FROM food_orders
+            WHERE order_date >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)
+            GROUP BY DATE(order_date)
+            ORDER BY date ASC
+        `);
+
+        res.json({
+            success: true,
+            data: {
+                totalOrders: totalOrders[0]?.total || 0,
+                totalRevenue: totalRevenue[0]?.total || 0,
+                monthlyRevenue: monthlyRevenue[0]?.total || 0,
+                byStatus: byStatus || [],
+                recentOrders: recentOrders || []
+            }
+        });
+    } catch (error) {
+        console.error('Error fetching food stats:', error);
+        res.status(500).json({ success: false, message: 'Error fetching food stats' });
     }
 });
 
