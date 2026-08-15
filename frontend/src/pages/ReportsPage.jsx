@@ -11,6 +11,18 @@ import {
 } from 'react-icons/fa';
 import reportService from '../services/reportService';
 
+// ✅ Safe currency formatter (handles strings, null, undefined)
+const formatCurrency = (value) => {
+  const num = Number(value) || 0;
+  return num.toFixed(2);
+};
+
+// ✅ Safe number formatter (for counts)
+const formatNumber = (value) => {
+  const num = Number(value) || 0;
+  return num.toLocaleString();
+};
+
 const ReportsPage = () => {
   const [reportType, setReportType] = useState('occupancy');
   const [loading, setLoading] = useState(false);
@@ -69,7 +81,7 @@ const ReportsPage = () => {
   };
 
   // ============================================
-  // RENDER FUNCTIONS - FIXED
+  // RENDER FUNCTIONS - ALL FIXED
   // ============================================
 
   const renderOccupancyReport = () => {
@@ -79,19 +91,19 @@ const ReportsPage = () => {
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <div className="bg-gray-50 rounded-lg p-4 text-center">
             <p className="text-sm text-gray-600">Total Rooms</p>
-            <p className="text-2xl font-bold text-gray-900">{reportData.total_rooms || 0}</p>
+            <p className="text-2xl font-bold text-gray-900">{formatNumber(reportData.total_rooms)}</p>
           </div>
           <div className="bg-gray-50 rounded-lg p-4 text-center">
             <p className="text-sm text-gray-600">Occupied</p>
-            <p className="text-2xl font-bold text-blue-600">{reportData.occupied || 0}</p>
+            <p className="text-2xl font-bold text-blue-600">{formatNumber(reportData.occupied)}</p>
           </div>
           <div className="bg-gray-50 rounded-lg p-4 text-center">
             <p className="text-sm text-gray-600">Available</p>
-            <p className="text-2xl font-bold text-green-600">{reportData.available || 0}</p>
+            <p className="text-2xl font-bold text-green-600">{formatNumber(reportData.available)}</p>
           </div>
           <div className="bg-gray-50 rounded-lg p-4 text-center">
             <p className="text-sm text-gray-600">Occupancy Rate</p>
-            <p className="text-2xl font-bold text-primary-600">{reportData.occupancy_rate || 0}%</p>
+            <p className="text-2xl font-bold text-primary-600">{formatNumber(reportData.occupancy_rate)}%</p>
           </div>
         </div>
       </div>
@@ -105,7 +117,8 @@ const ReportsPage = () => {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div className="bg-green-50 rounded-lg p-4 text-center">
             <p className="text-sm text-gray-600">Total Revenue</p>
-            <p className="text-2xl font-bold text-green-600">${reportData.total_revenue?.toFixed(2) || '0.00'}</p>
+            {/* ✅ FIXED: Use formatCurrency */}
+            <p className="text-2xl font-bold text-green-600">${formatCurrency(reportData.total_revenue)}</p>
           </div>
         </div>
         
@@ -117,7 +130,7 @@ const ReportsPage = () => {
               {reportData.by_payment_method.map((item, index) => (
                 <div key={index} className="flex justify-between items-center bg-gray-50 rounded-lg p-3">
                   <span className="capitalize">{item.payment_method?.replace('_', ' ')}</span>
-                  <span className="font-bold text-gray-900">${item.total?.toFixed(2) || '0.00'}</span>
+                  <span className="font-bold text-gray-900">${formatCurrency(item.total)}</span>
                 </div>
               ))}
             </div>
@@ -132,7 +145,7 @@ const ReportsPage = () => {
               {reportData.by_room_type.map((item, index) => (
                 <div key={index} className="flex justify-between items-center bg-gray-50 rounded-lg p-3">
                   <span>{item.name || 'Unknown'}</span>
-                  <span className="font-bold text-gray-900">${item.total?.toFixed(2) || '0.00'}</span>
+                  <span className="font-bold text-gray-900">${formatCurrency(item.total)}</span>
                 </div>
               ))}
             </div>
@@ -149,11 +162,10 @@ const ReportsPage = () => {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div className="bg-blue-50 rounded-lg p-4 text-center">
             <p className="text-sm text-gray-600">Total Reservations</p>
-            <p className="text-2xl font-bold text-blue-600">{reportData.total_reservations || 0}</p>
+            <p className="text-2xl font-bold text-blue-600">{formatNumber(reportData.total_reservations)}</p>
           </div>
         </div>
 
-        {/* By Status */}
         {reportData.by_status && reportData.by_status.length > 0 && (
           <div>
             <h4 className="font-medium text-gray-700 mb-2">By Status</h4>
@@ -161,14 +173,13 @@ const ReportsPage = () => {
               {reportData.by_status.map((item, index) => (
                 <div key={index} className="flex justify-between items-center bg-gray-50 rounded-lg p-3">
                   <span className="capitalize">{item.reservation_status?.replace('_', ' ')}</span>
-                  <span className="font-bold text-gray-900">{item.count}</span>
+                  <span className="font-bold text-gray-900">{formatNumber(item.count)}</span>
                 </div>
               ))}
             </div>
           </div>
         )}
 
-        {/* By Source */}
         {reportData.by_source && reportData.by_source.length > 0 && (
           <div>
             <h4 className="font-medium text-gray-700 mb-2">By Source</h4>
@@ -176,7 +187,7 @@ const ReportsPage = () => {
               {reportData.by_source.map((item, index) => (
                 <div key={index} className="flex justify-between items-center bg-gray-50 rounded-lg p-3">
                   <span className="capitalize">{item.source}</span>
-                  <span className="font-bold text-gray-900">{item.count}</span>
+                  <span className="font-bold text-gray-900">{formatNumber(item.count)}</span>
                 </div>
               ))}
             </div>
@@ -193,11 +204,10 @@ const ReportsPage = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="bg-purple-50 rounded-lg p-4 text-center">
             <p className="text-sm text-gray-600">Total Guests</p>
-            <p className="text-2xl font-bold text-purple-600">{reportData.total_guests || 0}</p>
+            <p className="text-2xl font-bold text-purple-600">{formatNumber(reportData.total_guests)}</p>
           </div>
         </div>
 
-        {/* By Country */}
         {reportData.by_country && reportData.by_country.length > 0 && (
           <div>
             <h4 className="font-medium text-gray-700 mb-2">By Country</h4>
@@ -205,14 +215,13 @@ const ReportsPage = () => {
               {reportData.by_country.map((item, index) => (
                 <div key={index} className="flex justify-between items-center bg-gray-50 rounded-lg p-3">
                   <span>{item.country || 'Unknown'}</span>
-                  <span className="font-bold text-gray-900">{item.count}</span>
+                  <span className="font-bold text-gray-900">{formatNumber(item.count)}</span>
                 </div>
               ))}
             </div>
           </div>
         )}
 
-        {/* Top Spenders */}
         {reportData.top_spenders && reportData.top_spenders.length > 0 && (
           <div>
             <h4 className="font-medium text-gray-700 mb-2">Top Spenders</h4>
@@ -220,7 +229,7 @@ const ReportsPage = () => {
               {reportData.top_spenders.map((item, index) => (
                 <div key={index} className="flex justify-between items-center bg-gray-50 rounded-lg p-3">
                   <span>{item.first_name} {item.last_name}</span>
-                  <span className="font-bold text-gray-900">${item.total_spent?.toFixed(2) || '0.00'}</span>
+                  <span className="font-bold text-gray-900">${formatCurrency(item.total_spent)}</span>
                 </div>
               ))}
             </div>
@@ -234,7 +243,6 @@ const ReportsPage = () => {
     if (!reportData) return null;
     return (
       <div className="space-y-4">
-        {/* By Status */}
         {reportData.by_status && reportData.by_status.length > 0 && (
           <div>
             <h4 className="font-medium text-gray-700 mb-2">Payments by Status</h4>
@@ -243,25 +251,24 @@ const ReportsPage = () => {
                 <div key={index} className="flex justify-between items-center bg-gray-50 rounded-lg p-3">
                   <div>
                     <span className="capitalize">{item.status}</span>
-                    <span className="text-sm text-gray-500 ml-2">({item.count} payments)</span>
+                    <span className="text-sm text-gray-500 ml-2">({formatNumber(item.count)} payments)</span>
                   </div>
-                  <span className="font-bold text-gray-900">${item.total?.toFixed(2) || '0.00'}</span>
+                  <span className="font-bold text-gray-900">${formatCurrency(item.total)}</span>
                 </div>
               ))}
             </div>
           </div>
         )}
 
-        {/* Outstanding */}
         {reportData.outstanding && (
           <div className="bg-yellow-50 rounded-lg p-4">
             <div className="flex justify-between items-center">
               <span className="text-gray-700">Outstanding Balance</span>
-              <span className="font-bold text-yellow-700">${reportData.outstanding.total?.toFixed(2) || '0.00'}</span>
+              <span className="font-bold text-yellow-700">${formatCurrency(reportData.outstanding.total)}</span>
             </div>
             <div className="flex justify-between items-center mt-1">
               <span className="text-sm text-gray-500">Number of reservations with balance</span>
-              <span className="font-bold text-yellow-700">{reportData.outstanding.count || 0}</span>
+              <span className="font-bold text-yellow-700">{formatNumber(reportData.outstanding.count)}</span>
             </div>
           </div>
         )}

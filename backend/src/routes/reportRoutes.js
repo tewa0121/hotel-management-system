@@ -4,18 +4,12 @@ const { verifyToken, authorize } = require('../middleware/auth');
 
 const router = express.Router();
 
-// Occupancy Report
+// ============================================
+// OCCUPANCY REPORT
+// ============================================
 router.get('/occupancy', verifyToken, authorize('admin', 'manager', 'accountant'), async (req, res) => {
     try {
         const { start_date, end_date } = req.query;
-
-        let dateFilter = '';
-        const params = [];
-
-        if (start_date && end_date) {
-            dateFilter = ' AND r.check_in_date <= ? AND r.check_out_date >= ?';
-            params.push(end_date, start_date);
-        }
 
         // Total rooms
         const [totalRooms] = await pool.execute(
@@ -37,13 +31,10 @@ router.get('/occupancy', verifyToken, authorize('admin', 'manager', 'accountant'
             AND check_in_date <= CURDATE() AND check_out_date >= CURDATE()
         `);
 
-        // Available rooms
-        const total = totalRooms[0].total;
-        const occupiedCount = occupied[0].occupied || 0;
-        const reservedCount = reserved[0].reserved || 0;
+        const total = totalRooms[0]?.total || 0;
+        const occupiedCount = occupied[0]?.occupied || 0;
+        const reservedCount = reserved[0]?.reserved || 0;
         const available = total - occupiedCount - reservedCount;
-
-        // Occupancy rate
         const occupancyRate = total > 0 ? Math.round((occupiedCount / total) * 100) : 0;
 
         res.json({
@@ -57,15 +48,18 @@ router.get('/occupancy', verifyToken, authorize('admin', 'manager', 'accountant'
             }
         });
     } catch (error) {
-        console.error('Error generating occupancy report:', error);
+        console.error('❌ Occupancy report error:', error);
         res.status(500).json({
             success: false,
-            message: 'Error generating occupancy report'
+            message: 'Error generating occupancy report',
+            error: error.message
         });
     }
 });
 
-// Revenue Report
+// ============================================
+// REVENUE REPORT - COMPLETE FIX
+// ============================================
 router.get('/revenue', verifyToken, authorize('admin', 'manager', 'accountant'), async (req, res) => {
     try {
         const { start_date, end_date, period } = req.query;
@@ -89,9 +83,9 @@ router.get('/revenue', verifyToken, authorize('admin', 'manager', 'accountant'),
             label = 'Monthly';
         }
 
-        // Revenue by date
+        // 1. Revenue by date
         const [revenueByDate] = await pool.execute(`
-            SELECT ${groupBy} as period, SUM(amount) as total
+            SELECT ${groupBy} as period, COALESCE(SUM(amount), 0) as total
             FROM payments
             WHERE status = 'completed'
             ${dateFilter}
@@ -100,55 +94,72 @@ router.get('/revenue', verifyToken, authorize('admin', 'manager', 'accountant'),
             LIMIT 30
         `, params);
 
-        // Total revenue
+        // 2. Total revenue
         const [totalRevenue] = await pool.execute(`
-            SELECT SUM(amount) as total
+            SELECT COALESCE(SUM(amount), 0) as total
             FROM payments
             WHERE status = 'completed'
             ${dateFilter}
         `, params);
 
-        // Revenue by payment method
+        // 3. Revenue by payment method
         const [byPaymentMethod] = await pool.execute(`
-            SELECT payment_method, SUM(amount) as total
+            SELECT 
+                payment_method, 
+                COALESCE(SUM(amount), 0) as total
             FROM payments
             WHERE status = 'completed'
             ${dateFilter}
             GROUP BY payment_method
         `, params);
 
-        // Revenue by room type
+        // 4. Revenue by room type - FIXED: uses p.created_at to avoid ambiguity
+        let roomTypeDateFilter = '';
+        const roomTypeParams = [];
+
+        if (start_date && end_date) {
+            roomTypeDateFilter = ' AND DATE(p.created_at) BETWEEN ? AND ?';
+            roomTypeParams.push(start_date, end_date);
+        }
+
         const [byRoomType] = await pool.execute(`
-            SELECT rt.name, SUM(p.amount) as total
+            SELECT 
+                COALESCE(rt.name, 'Uncategorized') as name, 
+                COALESCE(SUM(p.amount), 0) as total
             FROM payments p
             LEFT JOIN reservations r ON p.reservation_id = r.id
             LEFT JOIN rooms rm ON r.room_id = rm.id
             LEFT JOIN room_types rt ON rm.room_type_id = rt.id
             WHERE p.status = 'completed'
-            ${dateFilter}
+            ${roomTypeDateFilter}
             GROUP BY rt.id
-        `, params);
+        `, roomTypeParams);
 
         res.json({
             success: true,
             data: {
                 total_revenue: totalRevenue[0]?.total || 0,
-                revenue_by_date: revenueByDate,
-                by_payment_method: byPaymentMethod,
-                by_room_type: byRoomType,
+                revenue_by_date: revenueByDate || [],
+                by_payment_method: byPaymentMethod || [],
+                by_room_type: byRoomType || [],
                 period: label
             }
         });
     } catch (error) {
-        console.error('Error generating revenue report:', error);
+        console.error('❌ Revenue report error:', error);
+        console.error('❌ SQL Error:', error.sqlMessage || error.message);
         res.status(500).json({
             success: false,
-            message: 'Error generating revenue report'
+            message: 'Error generating revenue report',
+            error: error.message,
+            sqlMessage: error.sqlMessage || null
         });
     }
 });
 
-// Reservation Report
+// ============================================
+// RESERVATION REPORT
+// ============================================
 router.get('/reservations', verifyToken, authorize('admin', 'manager'), async (req, res) => {
     try {
         const { start_date, end_date } = req.query;
@@ -161,7 +172,7 @@ router.get('/reservations', verifyToken, authorize('admin', 'manager'), async (r
             params.push(start_date, end_date);
         }
 
-        // Reservation counts by status
+        // By status
         const [byStatus] = await pool.execute(`
             SELECT reservation_status, COUNT(*) as count
             FROM reservations
@@ -169,14 +180,14 @@ router.get('/reservations', verifyToken, authorize('admin', 'manager'), async (r
             GROUP BY reservation_status
         `, params);
 
-        // Total reservations
+        // Total
         const [total] = await pool.execute(`
             SELECT COUNT(*) as total
             FROM reservations
             WHERE 1=1 ${dateFilter}
         `, params);
 
-        // Reservations by source
+        // By source
         const [bySource] = await pool.execute(`
             SELECT source, COUNT(*) as count
             FROM reservations
@@ -184,7 +195,7 @@ router.get('/reservations', verifyToken, authorize('admin', 'manager'), async (r
             GROUP BY source
         `, params);
 
-        // Monthly reservations
+        // Monthly
         const [monthly] = await pool.execute(`
             SELECT DATE_FORMAT(created_at, "%Y-%m") as month, COUNT(*) as count
             FROM reservations
@@ -198,21 +209,24 @@ router.get('/reservations', verifyToken, authorize('admin', 'manager'), async (r
             success: true,
             data: {
                 total_reservations: total[0]?.total || 0,
-                by_status: byStatus,
-                by_source: bySource,
-                monthly: monthly
+                by_status: byStatus || [],
+                by_source: bySource || [],
+                monthly: monthly || []
             }
         });
     } catch (error) {
-        console.error('Error generating reservation report:', error);
+        console.error('❌ Reservation report error:', error);
         res.status(500).json({
             success: false,
-            message: 'Error generating reservation report'
+            message: 'Error generating reservation report',
+            error: error.message
         });
     }
 });
 
-// Guest Report
+// ============================================
+// GUEST REPORT
+// ============================================
 router.get('/guests', verifyToken, authorize('admin', 'manager'), async (req, res) => {
     try {
         // Total guests
@@ -220,12 +234,12 @@ router.get('/guests', verifyToken, authorize('admin', 'manager'), async (req, re
             'SELECT COUNT(*) as total FROM guests'
         );
 
-        // New vs returning
+        // Stay distribution
         const [stays] = await pool.execute(
             'SELECT total_stays, COUNT(*) as count FROM guests GROUP BY total_stays'
         );
 
-        // Guests by country
+        // By country
         const [byCountry] = await pool.execute(`
             SELECT country, COUNT(*) as count
             FROM guests
@@ -235,7 +249,7 @@ router.get('/guests', verifyToken, authorize('admin', 'manager'), async (req, re
             LIMIT 10
         `);
 
-        // Top spending guests
+        // Top spenders
         const [topSpenders] = await pool.execute(`
             SELECT g.first_name, g.last_name, g.email, g.total_spent
             FROM guests g
@@ -248,21 +262,24 @@ router.get('/guests', verifyToken, authorize('admin', 'manager'), async (req, re
             success: true,
             data: {
                 total_guests: total[0]?.total || 0,
-                stays_distribution: stays,
-                by_country: byCountry,
-                top_spenders: topSpenders
+                stays_distribution: stays || [],
+                by_country: byCountry || [],
+                top_spenders: topSpenders || []
             }
         });
     } catch (error) {
-        console.error('Error generating guest report:', error);
+        console.error('❌ Guest report error:', error);
         res.status(500).json({
             success: false,
-            message: 'Error generating guest report'
+            message: 'Error generating guest report',
+            error: error.message
         });
     }
 });
 
-// Payment Report
+// ============================================
+// PAYMENT REPORT
+// ============================================
 router.get('/payments', verifyToken, authorize('admin', 'manager', 'accountant'), async (req, res) => {
     try {
         const { start_date, end_date } = req.query;
@@ -275,18 +292,19 @@ router.get('/payments', verifyToken, authorize('admin', 'manager', 'accountant')
             params.push(start_date, end_date);
         }
 
-        // Payments by status
+        // By status
         const [byStatus] = await pool.execute(`
-            SELECT status, COUNT(*) as count, SUM(amount) as total
+            SELECT status, COUNT(*) as count, COALESCE(SUM(amount), 0) as total
             FROM payments
             WHERE 1=1 ${dateFilter}
-            GROUP BY status        `, params);
+            GROUP BY status
+        `, params);
 
-        // Daily payment summary
+        // Daily summary
         const [daily] = await pool.execute(`
             SELECT DATE(created_at) as date, 
                    COUNT(*) as count,
-                   SUM(amount) as total
+                   COALESCE(SUM(amount), 0) as total
             FROM payments
             WHERE status = 'completed'
             ${dateFilter}
@@ -297,7 +315,7 @@ router.get('/payments', verifyToken, authorize('admin', 'manager', 'accountant')
 
         // Outstanding balances
         const [outstanding] = await pool.execute(`
-            SELECT COUNT(*) as count, SUM(balance) as total
+            SELECT COUNT(*) as count, COALESCE(SUM(balance), 0) as total
             FROM reservations
             WHERE reservation_status IN ('confirmed', 'checked_in')
             AND balance > 0
@@ -306,16 +324,17 @@ router.get('/payments', verifyToken, authorize('admin', 'manager', 'accountant')
         res.json({
             success: true,
             data: {
-                by_status: byStatus,
-                daily_summary: daily,
-                outstanding: outstanding[0]
+                by_status: byStatus || [],
+                daily_summary: daily || [],
+                outstanding: outstanding[0] || { count: 0, total: 0 }
             }
         });
     } catch (error) {
-        console.error('Error generating payment report:', error);
+        console.error('❌ Payment report error:', error);
         res.status(500).json({
             success: false,
-            message: 'Error generating payment report'
+            message: 'Error generating payment report',
+            error: error.message
         });
     }
 });
