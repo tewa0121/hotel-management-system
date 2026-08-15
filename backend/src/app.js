@@ -21,7 +21,8 @@ const settingsRoutes = require('./routes/settingsRoutes');
 const expenseRoutes = require('./routes/expenseRoutes');
 const emailRoutes = require('./routes/emailRoutes'); 
 const guestAuthRoutes = require('./routes/guestAuthRoutes');
-const foodRoutes = require('./routes/foodRoutes');// ✅ ADD THIS
+const foodRoutes = require('./routes/foodRoutes');
+const notificationRoutes = require('./routes/notificationRoutes');// ✅ ADD THIS
 
 const app = express();
 
@@ -62,6 +63,7 @@ app.use('/api/expenses', expenseRoutes);
 app.use('/api/email', emailRoutes); 
 app.use('/api/guest', guestAuthRoutes);
 app.use('/api/food', foodRoutes);
+app.use('/api/notifications', notificationRoutes);
 // Error handling middleware
 app.use(errorHandler);
 

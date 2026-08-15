@@ -5,6 +5,7 @@ const FoodCategory = require('../models/FoodCategory');
 const FoodItem = require('../models/FoodItem');
 const FoodOrder = require('../models/FoodOrder');
 const Guest = require('../models/Guest');
+const { createNotification } = require('./notificationRoutes'); // ✅ Add this
 
 const router = express.Router();
 
@@ -172,6 +173,15 @@ router.post('/orders', verifyToken, async (req, res) => {
         };
         
         const order = await FoodOrder.create(orderData);
+        
+        // ✅ Create notification for new food order
+        await createNotification(
+            req.user.id,
+            `New food order #${order.id} placed by ${guest.first_name} ${guest.last_name} for $${order.total_amount}`,
+            'food_order',
+            `/food/orders/${order.id}`
+        );
+
         res.status(201).json({ success: true, data: order });
     } catch (error) {
         console.error('Error creating order:', error);
@@ -184,6 +194,15 @@ router.put('/orders/:id', verifyToken, authorize('admin', 'manager', 'receptioni
         const { status, notes } = req.body;
         const updated = await FoodOrder.update(req.params.id, { status, notes });
         if (!updated) return res.status(404).json({ success: false, message: 'Order not found' });
+        
+        // ✅ Create notification for order status update
+        await createNotification(
+            req.user.id,
+            `Food order #${req.params.id} status updated to ${status}`,
+            'food_order',
+            `/food/orders/${req.params.id}`
+        );
+
         res.json({ success: true, data: updated });
     } catch (error) {
         console.error('Error updating order:', error);
@@ -195,6 +214,15 @@ router.delete('/orders/:id', verifyToken, authorize('admin', 'manager'), async (
     try {
         const deleted = await FoodOrder.delete(req.params.id);
         if (!deleted) return res.status(404).json({ success: false, message: 'Order not found' });
+        
+        // ✅ Create notification for cancelled order
+        await createNotification(
+            req.user.id,
+            `Food order #${req.params.id} cancelled`,
+            'food_order',
+            `/food/orders`
+        );
+
         res.json({ success: true, message: 'Order cancelled' });
     } catch (error) {
         console.error('Error cancelling order:', error);
@@ -203,21 +231,18 @@ router.delete('/orders/:id', verifyToken, authorize('admin', 'manager'), async (
 });
 
 // ============================================
-// ✅ FOOD STATS FOR DASHBOARD (with monthlyRevenue)
+// FOOD STATS FOR DASHBOARD
 // ============================================
 router.get('/stats', verifyToken, async (req, res) => {
     try {
-        // Total orders (all time)
         const [totalOrders] = await pool.execute(
             'SELECT COUNT(*) as total FROM food_orders'
         );
 
-        // Total revenue (all time, exclude cancelled)
         const [totalRevenue] = await pool.execute(
             'SELECT COALESCE(SUM(total_amount), 0) as total FROM food_orders WHERE status != "cancelled"'
         );
 
-        // ✅ Monthly revenue (current month)
         const [monthlyRevenue] = await pool.execute(`
             SELECT COALESCE(SUM(total_amount), 0) as total 
             FROM food_orders 
@@ -226,14 +251,12 @@ router.get('/stats', verifyToken, async (req, res) => {
             AND YEAR(order_date) = YEAR(CURDATE())
         `);
 
-        // Orders by status
         const [byStatus] = await pool.execute(`
             SELECT status, COUNT(*) as count 
             FROM food_orders 
             GROUP BY status
         `);
 
-        // Recent orders (last 7 days)
         const [recentOrders] = await pool.execute(`
             SELECT DATE(order_date) as date, COUNT(*) as count, SUM(total_amount) as revenue
             FROM food_orders

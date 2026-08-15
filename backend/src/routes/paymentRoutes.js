@@ -1,6 +1,7 @@
 const express = require('express');
 const { pool } = require('../config/database');
 const { verifyToken, authorize } = require('../middleware/auth');
+const { createNotification } = require('./notificationRoutes'); // ✅ Add this
 
 const router = express.Router();
 
@@ -106,7 +107,6 @@ router.post('/', verifyToken, authorize('admin', 'manager', 'receptionist', 'acc
             notes
         } = req.body;
 
-        // ✅ Validate required fields
         if (!reservation_id) {
             await connection.rollback();
             return res.status(400).json({
@@ -139,7 +139,6 @@ router.post('/', verifyToken, authorize('admin', 'manager', 'receptionist', 'acc
             });
         }
 
-        // ✅ Check if reservation exists
         const [reservation] = await connection.execute(
             'SELECT total_amount, deposit_paid, balance, payment_status, guest_id FROM reservations WHERE id = ?',
             [reservation_id]
@@ -153,7 +152,6 @@ router.post('/', verifyToken, authorize('admin', 'manager', 'receptionist', 'acc
             });
         }
 
-        // ✅ Verify guest matches reservation
         if (reservation[0].guest_id !== parseInt(guest_id)) {
             await connection.rollback();
             return res.status(400).json({
@@ -167,7 +165,6 @@ router.post('/', verifyToken, authorize('admin', 'manager', 'receptionist', 'acc
         const totalAmount = parseFloat(reservation[0].total_amount) || 0;
         const paymentAmount = parseFloat(amount);
 
-        // ✅ Calculate new values
         const newDepositPaid = depositPaid + paymentAmount;
         const newBalance = currentBalance - paymentAmount;
         let paymentStatus = 'pending';
@@ -188,7 +185,6 @@ router.post('/', verifyToken, authorize('admin', 'manager', 'receptionist', 'acc
             paymentStatus
         });
 
-        // ✅ Insert payment
         const [result] = await connection.execute(
             `INSERT INTO payments (
                 reservation_id, guest_id, amount, currency, payment_method,
@@ -207,7 +203,6 @@ router.post('/', verifyToken, authorize('admin', 'manager', 'receptionist', 'acc
             ]
         );
 
-        // ✅ Update reservation
         await connection.execute(
             `UPDATE reservations SET
                 deposit_paid = ?,
@@ -217,7 +212,6 @@ router.post('/', verifyToken, authorize('admin', 'manager', 'receptionist', 'acc
             [newDepositPaid, newBalance, paymentStatus, reservation_id]
         );
 
-        // ✅ Update guest spending
         await connection.execute(
             'UPDATE guests SET total_spent = total_spent + ? WHERE id = ?',
             [paymentAmount, guest_id]
@@ -225,7 +219,6 @@ router.post('/', verifyToken, authorize('admin', 'manager', 'receptionist', 'acc
 
         await connection.commit();
 
-        // ✅ Get the created payment
         const [newPayment] = await connection.execute(`
             SELECT p.*, u.name as received_by_name
             FROM payments p
@@ -234,6 +227,14 @@ router.post('/', verifyToken, authorize('admin', 'manager', 'receptionist', 'acc
         `, [result.insertId]);
 
         console.log('✅ Payment created:', newPayment[0]);
+
+        // ✅ Create notification for payment
+        await createNotification(
+            req.user.id,
+            `Payment of $${paymentAmount.toFixed(2)} received from guest for reservation #${reservation[0].reservation_number || reservation_id}`,
+            'payment',
+            `/payments/${result.insertId}`
+        );
 
         res.status(201).json({
             success: true,
@@ -294,7 +295,7 @@ router.get('/:id', verifyToken, async (req, res) => {
 });
 
 // ============================================
-// ✅ COMPLETELY FIXED: POST refund payment
+// POST refund payment
 // ============================================
 router.post('/:id/refund', verifyToken, authorize('admin', 'manager', 'accountant'), async (req, res) => {
     const connection = await pool.getConnection();
@@ -308,7 +309,6 @@ router.post('/:id/refund', verifyToken, authorize('admin', 'manager', 'accountan
         console.log(`📤 REFUNDING PAYMENT ${paymentId}`);
         console.log('📤 Reason:', reason || 'No reason provided');
 
-        // ✅ Check if payment exists
         const [payment] = await connection.execute(
             'SELECT * FROM payments WHERE id = ?',
             [paymentId]
@@ -325,7 +325,6 @@ router.post('/:id/refund', verifyToken, authorize('admin', 'manager', 'accountan
         const paymentData = payment[0];
         console.log('📊 Payment:', paymentData);
 
-        // ✅ Check if already refunded
         if (paymentData.status === 'refunded') {
             await connection.rollback();
             return res.status(400).json({
@@ -334,7 +333,6 @@ router.post('/:id/refund', verifyToken, authorize('admin', 'manager', 'accountan
             });
         }
 
-        // ✅ Check if payment is completed
         if (paymentData.status !== 'completed') {
             await connection.rollback();
             return res.status(400).json({
@@ -343,7 +341,6 @@ router.post('/:id/refund', verifyToken, authorize('admin', 'manager', 'accountan
             });
         }
 
-        // ✅ Get reservation
         const [reservation] = await connection.execute(
             'SELECT * FROM reservations WHERE id = ?',
             [paymentData.reservation_id]
@@ -360,7 +357,6 @@ router.post('/:id/refund', verifyToken, authorize('admin', 'manager', 'accountan
         const reservationData = reservation[0];
         console.log('📊 Reservation:', reservationData);
 
-        // ✅ Convert to numbers using parseFloat
         const paymentAmount = parseFloat(paymentData.amount) || 0;
         const currentDepositPaid = parseFloat(reservationData.deposit_paid) || 0;
         const currentBalance = parseFloat(reservationData.balance) || 0;
@@ -373,11 +369,9 @@ router.post('/:id/refund', verifyToken, authorize('admin', 'manager', 'accountan
             totalAmount 
         });
 
-        // ✅ Calculate new values
         let newDepositPaid = currentDepositPaid - paymentAmount;
         let newBalance = currentBalance + paymentAmount;
         
-        // ✅ Prevent negative values
         if (newDepositPaid < 0) {
             console.log('⚠️ newDepositPaid was negative, setting to 0');
             newDepositPaid = 0;
@@ -400,7 +394,6 @@ router.post('/:id/refund', verifyToken, authorize('admin', 'manager', 'accountan
             paymentStatus 
         });
 
-        // ✅ Update payment status
         const refundNote = ` Refunded: ${reason || 'No reason provided'}`;
         await connection.execute(
             `UPDATE payments SET 
@@ -410,7 +403,6 @@ router.post('/:id/refund', verifyToken, authorize('admin', 'manager', 'accountan
             [refundNote, paymentId]
         );
 
-        // ✅ Update reservation with DIRECT SQL
         await connection.execute(
             `UPDATE reservations SET 
                 deposit_paid = ?,
@@ -421,6 +413,14 @@ router.post('/:id/refund', verifyToken, authorize('admin', 'manager', 'accountan
         );
 
         await connection.commit();
+
+        // ✅ Create notification for refund
+        await createNotification(
+            req.user.id,
+            `Payment #${paymentId} refunded - ${reason || 'No reason provided'}`,
+            'payment',
+            `/payments/${paymentId}`
+        );
 
         console.log('✅✅✅ REFUND SUCCESSFUL');
         console.log('=========================================');

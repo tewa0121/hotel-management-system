@@ -4,6 +4,7 @@ const { verifyToken, authorize } = require('../middleware/auth');
 const Reservation = require('../models/Reservation');
 const Room = require('../models/Room');
 const Guest = require('../models/Guest');
+const { createNotification } = require('./notificationRoutes'); // ✅ Add this
 
 const router = express.Router();
 
@@ -39,7 +40,7 @@ router.get('/', verifyToken, async (req, res) => {
 });
 
 // ============================================
-// ✅ NEW: GET reservations by guest ID (for Food Module)
+// GET reservations by guest ID (for Food Module)
 // ============================================
 router.get('/guest/:guestId', verifyToken, async (req, res) => {
     try {
@@ -174,6 +175,14 @@ router.post('/', verifyToken, async (req, res) => {
         );
 
         await connection.commit();
+
+        // ✅ Create notification for new reservation
+        await createNotification(
+            req.user.id,
+            `New reservation #${reservation.reservation_number} created for guest ${reservation.first_name || 'Guest'}`,
+            'reservation',
+            `/reservations/${reservation.id}`
+        );
 
         res.status(201).json({
             success: true,
@@ -322,6 +331,14 @@ router.put('/:id', verifyToken, async (req, res) => {
             WHERE r.id = ?
         `, [req.params.id]);
 
+        // ✅ Create notification for updated reservation
+        await createNotification(
+            req.user.id,
+            `Reservation #${reservation.reservation_number} updated`,
+            'reservation',
+            `/reservations/${req.params.id}`
+        );
+
         res.json({
             success: true,
             message: 'Reservation updated successfully',
@@ -372,6 +389,14 @@ router.post('/:id/cancel', verifyToken, async (req, res) => {
         );
 
         await connection.commit();
+
+        // ✅ Create notification for cancelled reservation
+        await createNotification(
+            req.user.id,
+            `Reservation #${reservation.reservation_number} cancelled`,
+            'reservation',
+            `/reservations`
+        );
 
         res.json({
             success: true,
@@ -441,6 +466,14 @@ router.post('/:id/check-in', verifyToken, authorize('admin', 'manager', 'recepti
 
         await connection.commit();
 
+        // ✅ Create notification for check-in
+        await createNotification(
+            req.user.id,
+            `Guest ${reservation.first_name || 'Guest'} checked in to room ${reservation.room_number}`,
+            'reservation',
+            `/reservations/${req.params.id}`
+        );
+
         res.json({
             success: true,
             message: 'Guest checked in successfully'
@@ -498,6 +531,14 @@ router.post('/:id/check-out', verifyToken, authorize('admin', 'manager', 'recept
         );
 
         await connection.commit();
+
+        // ✅ Create notification for check-out
+        await createNotification(
+            req.user.id,
+            `Guest ${reservation.first_name || 'Guest'} checked out from room ${reservation.room_number}`,
+            'reservation',
+            `/reservations/${req.params.id}`
+        );
 
         res.json({
             success: true,
