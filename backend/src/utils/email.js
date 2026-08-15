@@ -4,16 +4,23 @@ const dotenv = require('dotenv');
 dotenv.config();
 
 // ============================================
-// CREATE TRANSPORTER
+// CREATE TRANSPORTER - FIXED FOR MAILTRAP
 // ============================================
 const transporter = nodemailer.createTransport({
-    host: process.env.EMAIL_HOST || 'smtp.gmail.com',
+    host: process.env.EMAIL_HOST || 'sandbox.smtp.mailtrap.io',
     port: parseInt(process.env.EMAIL_PORT) || 587,
-    secure: false,
+    secure: false, // Use STARTTLS (true for port 465)
     auth: {
         user: process.env.EMAIL_USER,
         pass: process.env.EMAIL_PASS
-    }
+    },
+    // ✅ Fix for TLS connection issues
+    tls: {
+        rejectUnauthorized: false // Allows self-signed certificates (safe for testing)
+    },
+    // ✅ Additional connection options
+    connectionTimeout: 10000, // 10 seconds
+    socketTimeout: 10000
 });
 
 // ============================================
@@ -39,7 +46,7 @@ const sendEmail = async (to, subject, html, text = '') => {
 };
 
 // ============================================
-// EMAIL TEMPLATES
+// EMAIL TEMPLATES (unchanged)
 // ============================================
 const templates = {
     // 1. Reservation Confirmation
