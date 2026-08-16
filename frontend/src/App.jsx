@@ -21,10 +21,13 @@ import SettingsPage from './pages/SettingsPage';
 import GuestLoginPage from './pages/GuestLoginPage';
 import GuestDashboardPage from './pages/GuestDashboardPage';
 
-// ✅ Food Module Pages
+// Food Module Pages
 import FoodMenuPage from './pages/FoodMenuPage';
 import FoodOrderPage from './pages/FoodOrderPage';
 import FoodOrdersPage from './pages/FoodOrdersPage';
+
+// ✅ Import the 404 Page
+import NotFoundPage from './pages/NotFoundPage';
 
 // Layout Component
 import Layout from './components/common/Layout';
@@ -177,7 +180,7 @@ function App() {
               </ProtectedRoute>
             } />
 
-            {/* ✅ Food Module Routes */}
+            {/* Food Module Routes */}
             <Route path="/food/menu" element={
               <ProtectedRoute>
                 <Layout>
@@ -202,8 +205,8 @@ function App() {
               </ProtectedRoute>
             } />
             
-            {/* Catch all - redirect to dashboard */}
-            <Route path="*" element={<Navigate to="/" replace />} />
+            {/* ✅ Catch all - Show the 404 page instead of redirecting */}
+            <Route path="*" element={<NotFoundPage />} />
           </Routes>
         </div>
       </Router>
