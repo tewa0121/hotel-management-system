@@ -2,14 +2,14 @@
  * ExpensesPage - Hotel Expense Management
  * Allows staff to track, filter, and manage all hotel expenses.
  */
-// import React, { useState, useEffect } from 'react';
-// import toast from 'react-hot-toast';
-// import {
-//     FaPlus,
-//     FaSearch,
-//     FaMoneyBillWave,
-//     FaTrash,
-//     FaEdit
+import React, { useState, useEffect } from 'react';
+import toast from 'react-hot-toast';
+import {
+    FaPlus,
+    FaSearch,
+    FaMoneyBillWave,
+    FaTrash,
+    FaEdit
 } from 'react-icons/fa';
 import expenseService from '../services/expenseService';
 
