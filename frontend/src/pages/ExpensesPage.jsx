@@ -1,15 +1,15 @@
+/**
+ * ExpensesPage - Hotel Expense Management
+ * Allows staff to track, filter, and manage all hotel expenses.
+ */
 import React, { useState, useEffect } from 'react';
 import toast from 'react-hot-toast';
-import { 
-    FaPlus, 
-    FaSearch, 
-    FaMoneyBillWave, 
-    FaCalendar, 
+import {
+    FaPlus,
+    FaSearch,
+    FaMoneyBillWave,
     FaTrash,
-    FaEdit,
-    FaUser,
-    FaTimes,
-    FaFilter
+    FaEdit
 } from 'react-icons/fa';
 import expenseService from '../services/expenseService';
 
@@ -51,7 +51,7 @@ const ExpensesPage = () => {
 
     const handleSubmit = async (e) => {
         e.preventDefault();
-        
+
         if (!formData.category || !formData.description || !formData.amount) {
             toast.error('Please fill in all required fields');
             return;
@@ -70,7 +70,7 @@ const ExpensesPage = () => {
                 await expenseService.createExpense(expenseData);
                 toast.success('Expense created successfully');
             }
-            
+
             setShowForm(false);
             setEditingExpense(null);
             fetchExpenses();
@@ -138,7 +138,7 @@ const ExpensesPage = () => {
     // Filter expenses
     const filteredExpenses = expenses.filter(exp => {
         const matchSearch = exp.description?.toLowerCase().includes(search.toLowerCase()) ||
-                           exp.vendor?.toLowerCase().includes(search.toLowerCase());
+            exp.vendor?.toLowerCase().includes(search.toLowerCase());
         const matchCategory = filterCategory ? exp.category === filterCategory : true;
         return matchSearch && matchCategory;
     });
@@ -319,8 +319,8 @@ const ExpensesPage = () => {
                             <h2 className="text-xl font-bold">
                                 {editingExpense ? 'Edit Expense' : 'Add Expense'}
                             </h2>
-                            <button 
-                                onClick={() => setShowForm(false)} 
+                            <button
+                                onClick={() => setShowForm(false)}
                                 className="text-gray-500 hover:text-gray-700 text-2xl"
                             >
                                 ×
