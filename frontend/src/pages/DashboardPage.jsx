@@ -370,7 +370,7 @@ const DashboardPage = () => {
           value={foodStats.totalOrders || 0}
           color="bg-amber-500"
         />
-        {/* <StatCard
+        <StatCard
           icon={FaShoppingCart}
           title="Food Revenue (All Time)"
           value={foodStats.totalRevenue || 0}
@@ -389,7 +389,7 @@ const DashboardPage = () => {
           value={foodStats.byStatus?.find(s => s.status === 'ready')?.count || 0}
           color="bg-green-500"
         />
-      </div> */}
+      </div>
 
       {/* Expenses & Profit Row */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
