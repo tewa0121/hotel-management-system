@@ -1,14 +1,14 @@
-const express = require('express');
-const { pool } = require('../config/database');
-const { verifyToken, authorize } = require('../middleware/auth');
-const {
-    sendEmail,  // ✅ ADD THIS - Required for test route
-    sendReservationConfirmation,
-    sendCheckInEmail,
-    sendCheckOutEmail,
-    sendInvoiceEmail,
-    sendPasswordReset,
-    sendWelcomeEmail
+// const express = require('express');
+// const { pool } = require('../config/database');
+// const { verifyToken, authorize } = require('../middleware/auth');
+// const {
+//     sendEmail,  // ✅ ADD THIS - Required for test route
+//     sendReservationConfirmation,
+//     sendCheckInEmail,
+//     sendCheckOutEmail,
+//     sendInvoiceEmail,
+//     sendPasswordReset,
+//     sendWelcomeEmail
 } = require('../utils/email');
 const Reservation = require('../models/Reservation');
 const Invoice = require('../models/Invoice');
