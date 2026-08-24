@@ -1,0 +1,1138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Scientific Calculator</title>
+    <style>
+        /* ─── Reset & Base ─── */
+        *,
+        *::before,
+        *::after {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        body {
+            font-family: 'Inter', -apple-system, 'Segoe UI', Roboto, sans-serif;
+            background: #0b0e14;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            margin: 0;
+        }
+
+        /* ─── Calculator Shell ─── */
+        .calculator {
+            background: #141a24;
+            border-radius: 28px;
+            padding: 24px 20px 28px;
+            max-width: 460px;
+            width: 100%;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(255, 255, 255, 0.04);
+            transition: box-shadow 0.2s;
+        }
+
+        /* ─── Display ─── */
+        .display {
+            background: #0d111a;
+            border-radius: 16px;
+            padding: 18px 22px 14px;
+            margin-bottom: 22px;
+            min-height: 110px;
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-end;
+            align-items: flex-end;
+            overflow: hidden;
+            box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.5);
+            border: 1px solid rgba(255, 255, 255, 0.04);
+        }
+        .display .expression {
+            width: 100%;
+            text-align: right;
+            font-size: 18px;
+            color: rgba(255, 255, 255, 0.45);
+            min-height: 28px;
+            word-break: break-all;
+            font-weight: 400;
+            letter-spacing: 0.3px;
+            transition: color 0.2s;
+            font-family: 'JetBrains Mono', 'Fira Code', monospace;
+        }
+        .display .result {
+            width: 100%;
+            text-align: right;
+            font-size: 42px;
+            font-weight: 600;
+            color: #f0f4ff;
+            min-height: 52px;
+            line-height: 1.2;
+            word-break: break-all;
+            transition: font-size 0.15s;
+            font-family: 'JetBrains Mono', 'Fira Code', monospace;
+            letter-spacing: -0.5px;
+        }
+        .display .result.error {
+            color: #ff6b6b;
+            font-size: 28px;
+        }
+        .display .result.small {
+            font-size: 30px;
+        }
+
+        /* ─── Button Grid ─── */
+        .buttons {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 10px;
+        }
+
+        /* ─── Button Styles ─── */
+        .btn {
+            border: none;
+            border-radius: 14px;
+            padding: 16px 4px;
+            font-size: 18px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.12s ease;
+            font-family: 'Inter', -apple-system, 'Segoe UI', Roboto, sans-serif;
+            background: #1f2836;
+            color: #e8edf5;
+            box-shadow: 0 2px 0 rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+            user-select: none;
+            position: relative;
+            min-height: 58px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            letter-spacing: 0.2px;
+        }
+        .btn:active {
+            transform: scale(0.94);
+            box-shadow: 0 0 0 rgba(0, 0, 0, 0.3);
+        }
+        .btn:hover:not(:active) {
+            background: #273241;
+            box-shadow: 0 2px 0 rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+        }
+
+        /* Number buttons */
+        .btn.number {
+            background: #1a2330;
+            font-weight: 500;
+        }
+        .btn.number:hover:not(:active) {
+            background: #24303f;
+        }
+
+        /* Operator buttons */
+        .btn.operator {
+            background: #2a3a4a;
+            color: #7fc1ff;
+            font-weight: 600;
+            font-size: 20px;
+        }
+        .btn.operator:hover:not(:active) {
+            background: #354a5e;
+        }
+
+        /* Function buttons (scientific) */
+        .btn.function {
+            background: #16202b;
+            color: #8ab4e8;
+            font-size: 14px;
+            font-weight: 500;
+            min-height: 48px;
+            padding: 10px 4px;
+            letter-spacing: 0.4px;
+        }
+        .btn.function:hover:not(:active) {
+            background: #1f2d3d;
+        }
+
+        /* Equals button */
+        .btn.equals {
+            background: #3b7cff;
+            color: #fff;
+            font-weight: 700;
+            font-size: 24px;
+            box-shadow: 0 2px 0 rgba(0, 60, 200, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.15);
+        }
+        .btn.equals:hover:not(:active) {
+            background: #4a8aff;
+            box-shadow: 0 2px 0 rgba(0, 60, 200, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+        }
+        .btn.equals:active {
+            background: #2a6ae6;
+        }
+
+        /* Clear button */
+        .btn.clear {
+            background: #3d1f2a;
+            color: #ff7a8a;
+            font-weight: 600;
+        }
+        .btn.clear:hover:not(:active) {
+            background: #4f2836;
+        }
+
+        /* Backspace button */
+        .btn.backspace {
+            background: #1f2633;
+            color: #b0c7e8;
+            font-size: 20px;
+        }
+        .btn.backspace:hover:not(:active) {
+            background: #2a3345;
+        }
+
+        /* Span 2 columns */
+        .btn.span-2 {
+            grid-column: span 2;
+        }
+
+        /* Constant buttons (π, e) */
+        .btn.constant {
+            background: #1a2840;
+            color: #b8d4ff;
+            font-weight: 600;
+            font-style: italic;
+            font-size: 16px;
+        }
+        .btn.constant:hover:not(:active) {
+            background: #243554;
+        }
+
+        /* Parenthesis buttons */
+        .btn.parenthesis {
+            background: #1a2335;
+            color: #b0cff0;
+            font-weight: 600;
+        }
+        .btn.parenthesis:hover:not(:active) {
+            background: #24334a;
+        }
+
+        /* Negate button */
+        .btn.negate {
+            background: #1a2335;
+            color: #b0cff0;
+            font-weight: 600;
+        }
+        .btn.negate:hover:not(:active) {
+            background: #24334a;
+        }
+
+        /* ─── Memory indicator ─── */
+        .memory-indicator {
+            color: rgba(255, 255, 255, 0.2);
+            font-size: 11px;
+            font-weight: 500;
+            letter-spacing: 0.5px;
+            margin-top: 4px;
+            text-align: right;
+            min-height: 16px;
+            font-family: 'Inter', sans-serif;
+        }
+        .memory-indicator.active {
+            color: rgba(255, 215, 100, 0.6);
+        }
+
+        /* ─── Responsive ─── */
+        @media (max-width: 480px) {
+            .calculator {
+                padding: 16px 14px 20px;
+                border-radius: 20px;
+            }
+            .display {
+                padding: 14px 16px 10px;
+                min-height: 90px;
+            }
+            .display .result {
+                font-size: 34px;
+                min-height: 42px;
+            }
+            .display .expression {
+                font-size: 15px;
+                min-height: 22px;
+            }
+            .buttons {
+                gap: 7px;
+            }
+            .btn {
+                min-height: 50px;
+                font-size: 16px;
+                border-radius: 11px;
+                padding: 12px 4px;
+            }
+            .btn.function {
+                font-size: 12px;
+                min-height: 40px;
+                padding: 8px 2px;
+            }
+            .btn.equals {
+                font-size: 20px;
+            }
+            .btn.backspace {
+                font-size: 17px;
+            }
+            .display .result.small {
+                font-size: 24px;
+            }
+            .display .result.error {
+                font-size: 22px;
+            }
+        }
+        @media (max-width: 380px) {
+            .btn {
+                min-height: 42px;
+                font-size: 14px;
+                border-radius: 9px;
+                padding: 8px 2px;
+            }
+            .btn.function {
+                font-size: 10px;
+                min-height: 34px;
+                padding: 6px 2px;
+            }
+            .display .result {
+                font-size: 28px;
+                min-height: 36px;
+            }
+            .display .expression {
+                font-size: 13px;
+                min-height: 18px;
+            }
+            .buttons {
+                gap: 5px;
+            }
+            .calculator {
+                padding: 12px 10px 16px;
+            }
+        }
+
+        /* ─── Scrollbar styling ─── */
+        .display .expression::-webkit-scrollbar {
+            width: 0;
+            height: 0;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="root"></div>
+
+    <!-- ─── React & ReactDOM from CDN ─── -->
+    <script crossorigin src="https://unpkg.com/react@18.2.0/umd/react.production.min.js">
+    </script>
+    <script crossorigin src="https://unpkg.com/react-dom@18.2.0/umd/react-dom.production.min.js">
+    </script>
+
+    <script>
+        // ─────────────────────────────────────────────
+        //  SCIENTIFIC CALCULATOR — React Component
+        // ─────────────────────────────────────────────
+
+        const { useState, useRef, useCallback, useEffect, useMemo } = React;
+
+        // ─── Constants ───
+        const PI = Math.PI;
+        const E = Math.E;
+
+        // ─── Helper: factorial ───
+        function factorial(n) {
+            if (n < 0) return NaN;
+            if (n === 0 || n === 1) return 1;
+            if (n > 170) return Infinity;
+            let result = 1;
+            for (let i = 2; i <= n; i++) {
+                result *= i;
+            }
+            return result;
+        }
+
+        // ─── Helper: safe evaluation ───
+        function evaluateExpression(expr) {
+            if (!expr || expr.trim() === '') return '';
+
+            // Build a safe evaluator using Function constructor
+            // We replace various tokens with Math equivalents
+            let sanitized = expr;
+
+            // Replace × and ÷ with * and /
+            sanitized = sanitized.replace(/×/g, '*').replace(/÷/g, '/');
+
+            // Replace π and e with their values
+            sanitized = sanitized.replace(/π/g, `(${PI})`);
+            sanitized = sanitized.replace(/e(?![xp])/g, `(${E})`);
+
+            // Replace scientific function names
+            // sin( → Math.sin(  (in degrees)
+            // cos( → Math.cos(
+            // tan( → Math.tan(
+            // log( → Math.log10(
+            // ln(  → Math.log(
+            // sqrt( → Math.sqrt(
+            // We'll handle these with a custom replacer
+
+            // First, handle degree conversion for trig functions
+            // We need to wrap the argument in a degree-to-radian conversion
+            // Pattern: sin(30) → Math.sin(30 * Math.PI / 180)
+            // But we need to handle nested expressions: sin(30 + 20)
+
+            // This is complex with regex, so let's use a different approach:
+            // We'll use a function-based replacement
+
+            // Actually, for simplicity and safety, let me use a different approach.
+            // I'll use a combination of string replacement and Function constructor.
+
+            // Let me use a more robust approach: replace function calls with
+            // their Math equivalents using a custom parser.
+
+            // For simplicity, I'll use the approach where we:
+            // 1. Replace function names with Math equivalents
+            // 2. Handle degree conversion for trig functions
+
+            // But the issue is that we need to handle the arguments properly.
+            // Let me use a simpler approach: just use Function constructor
+            // with a set of allowed functions.
+
+            // Actually, let me use a different approach altogether.
+            // I'll use a custom evaluator that handles the functions.
+
+            // OK let me use a practical approach: use Function constructor
+            // with a set of predefined functions.
+
+            // Build a list of allowed functions
+            const allowedFunctions = {
+                sin: (x) => Math.sin(x * Math.PI / 180),
+                cos: (x) => Math.cos(x * Math.PI / 180),
+                tan: (x) => Math.tan(x * Math.PI / 180),
+                log: (x) => Math.log10(x),
+                ln: (x) => Math.log(x),
+                sqrt: (x) => Math.sqrt(x),
+                square: (x) => x * x,
+                cube: (x) => x * x * x,
+                reciprocal: (x) => 1 / x,
+                factorial: factorial,
+                exp: (x) => Math.exp(x),
+                abs: (x) => Math.abs(x),
+                round: (x) => Math.round(x),
+                floor: (x) => Math.floor(x),
+                ceil: (x) => Math.ceil(x),
+                PI: PI,
+                E: E,
+            };
+
+            // Build the function string for the evaluator
+            const funcNames = Object.keys(allowedFunctions);
+            const funcDeclarations = funcNames
+                .map(name => `const ${name} = allowedFunctions['${name}'];`)
+                .join('\n');
+
+            // We also need to handle implicit multiplication: 2π → 2*π, 3( → 3*(
+            // This is tricky with regex, let's handle some common cases
+            let processed = sanitized;
+
+            // Handle implicit multiplication: number followed by ( or function
+            // e.g., 2π → 2*π, 3( → 3*(
+            processed = processed.replace(/(\d)(?=\()/g, '$1*');
+            processed = processed.replace(/(\d)(?=π)/g, '$1*');
+            processed = processed.replace(/(\d)(?=e(?![xp]))/g, '$1*');
+
+            // Handle ) followed by ( → )*(
+            processed = processed.replace(/\)\(/g, ')*(');
+
+            // Handle ) followed by number → )*number
+            processed = processed.replace(/\)(\d)/g, ')*$1');
+
+            // Handle number followed by function name → number*function
+            // e.g., 2sin(30) → 2*sin(30)
+            processed = processed.replace(/(\d)(sin|cos|tan|log|ln|sqrt|square|cube|reciprocal|factorial|exp|abs|round|floor|ceil)/g,
+                '$1*$2');
+
+            // Handle ) followed by function name → )*function
+            processed = processed.replace(/\)(sin|cos|tan|log|ln|sqrt|square|cube|reciprocal|factorial|exp|abs|round|floor|ceil)/g,
+                ')*$1');
+
+            // Handle π followed by ( → π*(
+            processed = processed.replace(/π\(/g, `(${PI})*(`);
+
+            // Handle e followed by ( → e*(
+            processed = processed.replace(/e\(/g, `(${E})*(`);
+
+            // Handle π followed by number → π*number
+            processed = processed.replace(/π(\d)/g, `(${PI})*$1`);
+
+            // Handle e followed by number → e*number
+            processed = processed.replace(/e(\d)/g, `(${E})*$1`);
+
+            // Now evaluate using Function constructor
+            try {
+                const fn = new Function(
+                    'allowedFunctions',
+                    `
+                    ${funcDeclarations}
+                    return (${processed});
+                  `
+                );
+                const result = fn(allowedFunctions);
+                if (typeof result === 'number' && !Number.isFinite(result)) {
+                    if (result === Infinity) return 'Infinity';
+                    if (result === -Infinity) return '-Infinity';
+                    return 'Error';
+                }
+                if (typeof result === 'number' && isNaN(result)) {
+                    return 'Error';
+                }
+                return result;
+            } catch (err) {
+                return 'Error';
+            }
+        }
+
+        // ─── Main Calculator Component ───
+        function Calculator() {
+            // ── State ──
+            const [display, setDisplay] = useState('0');
+            const [expression, setExpression] = useState('');
+            const [result, setResult] = useState(null);
+            const [isNewCalculation, setIsNewCalculation] = useState(true);
+            const [memory, setMemory] = useState(0);
+            const [memoryIndicator, setMemoryIndicator] = useState(false);
+            const [history, setHistory] = useState([]);
+            const [showHistory, setShowHistory] = useState(false);
+            const [lastOperator, setLastOperator] = useState(null);
+            const [justEvaluated, setJustEvaluated] = useState(false);
+
+            const displayRef = useRef(null);
+
+            // ── Helpers ──
+            const formatNumber = (num) => {
+                if (num === undefined || num === null) return '0';
+                if (typeof num === 'string') return num;
+                if (!isFinite(num)) return String(num);
+                if (isNaN(num)) return 'Error';
+
+                // If it's an integer, show without decimal
+                if (Number.isInteger(num) && Math.abs(num) < 1e15) {
+                    return num.toString();
+                }
+
+                // For very large or small numbers, use exponential notation
+                if (Math.abs(num) > 1e15 || (Math.abs(num) < 1e-10 && num !== 0)) {
+                    return num.toExponential(6);
+                }
+
+                // Otherwise, show with up to 10 decimal places
+                const str = num.toFixed(10);
+                // Remove trailing zeros
+                return str.replace(/\.?0+$/, '');
+            };
+
+            const updateDisplay = (value, expr, res) => {
+                setDisplay(value);
+                if (expr !== undefined) setExpression(expr);
+                if (res !== undefined) setResult(res);
+            };
+
+            // ── Button Handlers ──
+
+            // Number input
+            const handleNumber = (num) => {
+                if (justEvaluated) {
+                    setDisplay(num);
+                    setExpression('');
+                    setResult(null);
+                    setJustEvaluated(false);
+                    setIsNewCalculation(true);
+                    return;
+                }
+
+                if (isNewCalculation) {
+                    setDisplay(num);
+                    setIsNewCalculation(false);
+                    setResult(null);
+                    return;
+                }
+
+                // Limit display length
+                if (display.length >= 20) return;
+
+                // If display is '0' and num is not '.', replace it
+                if (display === '0' && num !== '.') {
+                    setDisplay(num);
+                    return;
+                }
+
+                // If display already has a decimal and num is '.', ignore
+                if (num === '.' && display.includes('.')) return;
+
+                setDisplay(display + num);
+            };
+
+            // Operator input
+            const handleOperator = (op) => {
+                setJustEvaluated(false);
+
+                // If there's a result and no expression, use the result as the first operand
+                if (result !== null && expression === '') {
+                    const displayVal = formatNumber(result);
+                    setDisplay(displayVal);
+                    setExpression(displayVal + ' ' + op + ' ');
+                    setResult(null);
+                    setIsNewCalculation(true);
+                    setLastOperator(op);
+                    return;
+                }
+
+                // If we have a display value and expression is empty, start building
+                if (display !== '' && expression === '') {
+                    setExpression(display + ' ' + op + ' ');
+                    setIsNewCalculation(true);
+                    setLastOperator(op);
+                    return;
+                }
+
+                // If expression already has something
+                if (expression !== '') {
+                    // If display has a value, append it to expression
+                    if (display !== '' && !isNewCalculation) {
+                        // Check if the expression already ends with an operator
+                        const trimmed = expression.trim();
+                        const lastChar = trimmed[trimmed.length - 1];
+                        if (['+', '-', '*', '/'].includes(lastChar)) {
+                            // Replace the operator
+                            setExpression(trimmed.slice(0, -1) + ' ' + op + ' ');
+                        } else {
+                            setExpression(expression + display + ' ' + op + ' ');
+                        }
+                        setDisplay('0');
+                        setIsNewCalculation(true);
+                        setResult(null);
+                    } else {
+                        // Just change the operator
+                        const trimmed = expression.trim();
+                        const lastChar = trimmed[trimmed.length - 1];
+                        if (['+', '-', '*', '/'].includes(lastChar)) {
+                            setExpression(trimmed.slice(0, -1) + ' ' + op + ' ');
+                        } else {
+                            setExpression(expression + ' ' + op + ' ');
+                        }
+                    }
+                    setLastOperator(op);
+                }
+            };
+
+            // Equals
+            const handleEquals = () => {
+                let exprToEval = expression;
+
+                // If we have a display value and no expression, just evaluate the display
+                if (expression === '' && display !== '') {
+                    const result = evaluateExpression(display);
+                    if (typeof result === 'number' && !isNaN(result) && isFinite(result)) {
+                        setDisplay(formatNumber(result));
+                        setResult(result);
+                        setExpression(display + ' =');
+                        setIsNewCalculation(true);
+                        setJustEvaluated(true);
+                        // Add to history
+                        setHistory(prev => [...prev, { expr: display, result: formatNumber(result) }]);
+                        return;
+                    } else {
+                        setDisplay('Error');
+                        setResult(null);
+                        setExpression(display + ' =');
+                        setIsNewCalculation(true);
+                        setJustEvaluated(true);
+                        return;
+                    }
+                }
+
+                // If expression ends with an operator, append the display value
+                const trimmed = expression.trim();
+                const lastChar = trimmed.length > 0 ? trimmed[trimmed.length - 1] : '';
+                if (['+', '-', '*', '/'].includes(lastChar)) {
+                    exprToEval = expression + display;
+                } else if (trimmed !== '' && display !== '0' && !isNewCalculation) {
+                    exprToEval = expression + display;
+                } else {
+                    exprToEval = expression.trim();
+                }
+
+                if (exprToEval === '' || exprToEval.trim() === '') {
+                    return;
+                }
+
+                const evalResult = evaluateExpression(exprToEval);
+                if (typeof evalResult === 'number' && !isNaN(evalResult) && isFinite(evalResult)) {
+                    const formatted = formatNumber(evalResult);
+                    setDisplay(formatted);
+                    setResult(evalResult);
+                    setExpression(exprToEval + ' =');
+                    setIsNewCalculation(true);
+                    setJustEvaluated(true);
+                    // Add to history
+                    setHistory(prev => [...prev, { expr: exprToEval, result: formatted }]);
+                    if (history.length > 50) {
+                        setHistory(prev => prev.slice(-50));
+                    }
+                } else {
+                    setDisplay('Error');
+                    setResult(null);
+                    setExpression(exprToEval + ' =');
+                    setIsNewCalculation(true);
+                    setJustEvaluated(true);
+                }
+            };
+
+            // Scientific functions
+            const handleScientific = (func) => {
+                const currentValue = parseFloat(display);
+                if (isNaN(currentValue)) {
+                    setDisplay('Error');
+                    return;
+                }
+
+                let result;
+                let displayExpr = '';
+                const displayVal = formatNumber(currentValue);
+
+                switch (func) {
+                    case 'sin':
+                        result = Math.sin(currentValue * Math.PI / 180);
+                        displayExpr = `sin(${displayVal})`;
+                        break;
+                    case 'cos':
+                        result = Math.cos(currentValue * Math.PI / 180);
+                        displayExpr = `cos(${displayVal})`;
+                        break;
+                    case 'tan':
+                        result = Math.tan(currentValue * Math.PI / 180);
+                        displayExpr = `tan(${displayVal})`;
+                        break;
+                    case 'log':
+                        if (currentValue <= 0) { setDisplay('Error'); return; }
+                        result = Math.log10(currentValue);
+                        displayExpr = `log(${displayVal})`;
+                        break;
+                    case 'ln':
+                        if (currentValue <= 0) { setDisplay('Error'); return; }
+                        result = Math.log(currentValue);
+                        displayExpr = `ln(${displayVal})`;
+                        break;
+                    case 'sqrt':
+                        if (currentValue < 0) { setDisplay('Error'); return; }
+                        result = Math.sqrt(currentValue);
+                        displayExpr = `√(${displayVal})`;
+                        break;
+                    case 'square':
+                        result = currentValue * currentValue;
+                        displayExpr = `(${displayVal})²`;
+                        break;
+                    case 'cube':
+                        result = currentValue * currentValue * currentValue;
+                        displayExpr = `(${displayVal})³`;
+                        break;
+                    case 'reciprocal':
+                        if (currentValue === 0) { setDisplay('Error'); return; }
+                        result = 1 / currentValue;
+                        displayExpr = `1/(${displayVal})`;
+                        break;
+                    case 'factorial':
+                        if (currentValue < 0 || !Number.isInteger(currentValue) || currentValue > 170) {
+                            setDisplay('Error');
+                            return;
+                        }
+                        result = factorial(currentValue);
+                        displayExpr = `${displayVal}!`;
+                        break;
+                    case 'exp':
+                        result = Math.exp(currentValue);
+                        displayExpr = `e^(${displayVal})`;
+                        break;
+                    case 'abs':
+                        result = Math.abs(currentValue);
+                        displayExpr = `|${displayVal}|`;
+                        break;
+                    default:
+                        return;
+                }
+
+                if (!isFinite(result)) {
+                    setDisplay('Infinity');
+                    setResult(null);
+                    setExpression(displayExpr + ' =');
+                    setIsNewCalculation(true);
+                    setJustEvaluated(true);
+                    return;
+                }
+
+                const formatted = formatNumber(result);
+                setDisplay(formatted);
+                setResult(result);
+                setExpression(displayExpr + ' =');
+                setIsNewCalculation(true);
+                setJustEvaluated(true);
+
+                // Add to history
+                setHistory(prev => [...prev, { expr: displayExpr, result: formatted }]);
+                if (history.length > 50) {
+                    setHistory(prev => prev.slice(-50));
+                }
+            };
+
+            // Constants
+            const handleConstant = (constVal) => {
+                if (justEvaluated) {
+                    setDisplay(constVal === 'PI' ? formatNumber(PI) : formatNumber(E));
+                    setExpression('');
+                    setResult(null);
+                    setJustEvaluated(false);
+                    setIsNewCalculation(false);
+                    return;
+                }
+
+                const val = constVal === 'PI' ? PI : E;
+                const label = constVal === 'PI' ? 'π' : 'e';
+
+                if (isNewCalculation || display === '0') {
+                    setDisplay(formatNumber(val));
+                    setIsNewCalculation(false);
+                    setResult(null);
+                    // Build expression
+                    if (expression === '') {
+                        setExpression(label);
+                    } else {
+                        setExpression(expression + label);
+                    }
+                } else {
+                    setDisplay(display + label);
+                }
+            };
+
+            // Parentheses
+            const handleParenthesis = (p) => {
+                setJustEvaluated(false);
+                if (isNewCalculation && p === '(') {
+                    setDisplay('(');
+                    setIsNewCalculation(false);
+                    setResult(null);
+                    if (expression === '') {
+                        setExpression('(');
+                    } else {
+                        setExpression(expression + '(');
+                    }
+                    return;
+                }
+
+                if (p === '(') {
+                    // Add opening parenthesis
+                    if (display !== '' && !isNewCalculation) {
+                        // If there's a number, add * before (
+                        setDisplay(display + '*(');
+                        if (expression !== '') {
+                            setExpression(expression + display + '*(');
+                        } else {
+                            setExpression(display + '*(');
+                        }
+                        setDisplay('0');
+                        setIsNewCalculation(true);
+                    } else {
+                        setDisplay('(');
+                        if (expression !== '') {
+                            setExpression(expression + '(');
+                        } else {
+                            setExpression('(');
+                        }
+                        setIsNewCalculation(false);
+                    }
+                } else {
+                    // Closing parenthesis
+                    setDisplay(display + ')');
+                    if (expression !== '') {
+                        setExpression(expression + display + ')');
+                    } else {
+                        setExpression(display + ')');
+                    }
+                    setDisplay('0');
+                    setIsNewCalculation(true);
+                }
+            };
+
+            // Clear
+            const handleClear = () => {
+                setDisplay('0');
+                setExpression('');
+                setResult(null);
+                setIsNewCalculation(true);
+                setJustEvaluated(false);
+                setLastOperator(null);
+            };
+
+            // Backspace
+            const handleBackspace = () => {
+                if (justEvaluated) {
+                    handleClear();
+                    return;
+                }
+                if (display.length <= 1) {
+                    setDisplay('0');
+                    setIsNewCalculation(true);
+                    return;
+                }
+                setDisplay(display.slice(0, -1));
+            };
+
+            // Negate
+            const handleNegate = () => {
+                if (justEvaluated) {
+                    const val = parseFloat(display);
+                    if (!isNaN(val)) {
+                        const negated = -val;
+                        setDisplay(formatNumber(negated));
+                        setResult(negated);
+                        setExpression(`-(${display})`);
+                        setJustEvaluated(false);
+                        setIsNewCalculation(true);
+                    }
+                    return;
+                }
+
+                if (display === '0') return;
+                if (display.startsWith('-')) {
+                    setDisplay(display.slice(1));
+                } else {
+                    setDisplay('-' + display);
+                }
+            };
+
+            // Memory functions
+            const handleMemory = (action) => {
+                const currentVal = parseFloat(display);
+                if (isNaN(currentVal)) return;
+
+                switch (action) {
+                    case 'MC':
+                        setMemory(0);
+                        setMemoryIndicator(false);
+                        break;
+                    case 'MR':
+                        setDisplay(formatNumber(memory));
+                        setResult(memory);
+                        setIsNewCalculation(true);
+                        setJustEvaluated(false);
+                        break;
+                    case 'M+':
+                        setMemory(memory + currentVal);
+                        setMemoryIndicator(true);
+                        break;
+                    case 'M-':
+                        setMemory(memory - currentVal);
+                        setMemoryIndicator(true);
+                        break;
+                    default:
+                        break;
+                }
+            };
+
+            // Keyboard support
+            useEffect(() => {
+                const handleKeyDown = (e) => {
+                    const key = e.key;
+                    if (key >= '0' && key <= '9') {
+                        e.preventDefault();
+                        handleNumber(key);
+                    } else if (key === '.') {
+                        e.preventDefault();
+                        handleNumber('.');
+                    } else if (key === '+') {
+                        e.preventDefault();
+                        handleOperator('+');
+                    } else if (key === '-') {
+                        e.preventDefault();
+                        handleOperator('-');
+                    } else if (key === '*') {
+                        e.preventDefault();
+                        handleOperator('*');
+                    } else if (key === '/') {
+                        e.preventDefault();
+                        handleOperator('/');
+                    } else if (key === 'Enter' || key === '=') {
+                        e.preventDefault();
+                        handleEquals();
+                    } else if (key === 'Escape' || key === 'c') {
+                        e.preventDefault();
+                        handleClear();
+                    } else if (key === 'Backspace') {
+                        e.preventDefault();
+                        handleBackspace();
+                    } else if (key === '(') {
+                        e.preventDefault();
+                        handleParenthesis('(');
+                    } else if (key === ')') {
+                        e.preventDefault();
+                        handleParenthesis(')');
+                    } else if (key === 'p') {
+                        e.preventDefault();
+                        handleConstant('PI');
+                    } else if (key === 'e') {
+                        e.preventDefault();
+                        handleConstant('E');
+                    } else if (key === 's') {
+                        e.preventDefault();
+                        handleScientific('sin');
+                    } else if (key === 'c' && e.ctrlKey) {
+                        e.preventDefault();
+                        handleClear();
+                    }
+                };
+                window.addEventListener('keydown', handleKeyDown);
+                return () => window.removeEventListener('keydown', handleKeyDown);
+            }, [display, expression, isNewCalculation, result, justEvaluated]);
+
+            // ── Render ──
+
+            const getDisplayClass = () => {
+                if (display === 'Error' || display === 'Infinity' || display === '-Infinity') return 'error';
+                if (display.length > 14) return 'small';
+                return '';
+            };
+
+            // Button definition: [label, type, handler, extra]
+            const buttonRows = [
+                // Row 1: Parentheses, clear, backspace, division
+                [
+                    { label: '(', type: 'parenthesis', handler: () => handleParenthesis('(') },
+                    { label: ')', type: 'parenthesis', handler: () => handleParenthesis(')') },
+                    { label: 'C', type: 'clear', handler: handleClear },
+                    { label: '⌫', type: 'backspace', handler: handleBackspace },
+                    { label: '÷', type: 'operator', handler: () => handleOperator('/') },
+                ],
+                // Row 2: sin, cos, tan, log, ln
+                [
+                    { label: 'sin', type: 'function', handler: () => handleScientific('sin') },
+                    { label: 'cos', type: 'function', handler: () => handleScientific('cos') },
+                    { label: 'tan', type: 'function', handler: () => handleScientific('tan') },
+                    { label: 'log', type: 'function', handler: () => handleScientific('log') },
+                    { label: 'ln', type: 'function', handler: () => handleScientific('ln') },
+                ],
+                // Row 3: sqrt, x², x³, xⁿ, 1/x
+                [
+                    { label: '√', type: 'function', handler: () => handleScientific('sqrt') },
+                    { label: 'x²', type: 'function', handler: () => handleScientific('square') },
+                    { label: 'x³', type: 'function', handler: () => handleScientific('cube') },
+                    { label: 'xⁿ', type: 'function', handler: () => handleScientific('exp') },
+                    { label: '1/x', type: 'function', handler: () => handleScientific('reciprocal') },
+                ],
+                // Row 4: 7, 8, 9, ×, π
+                [
+                    { label: '7', type: 'number', handler: () => handleNumber('7') },
+                    { label: '8', type: 'number', handler: () => handleNumber('8') },
+                    { label: '9', type: 'number', handler: () => handleNumber('9') },
+                    { label: '×', type: 'operator', handler: () => handleOperator('*') },
+                    { label: 'π', type: 'constant', handler: () => handleConstant('PI') },
+                ],
+                // Row 5: 4, 5, 6, −, e
+                [
+                    { label: '4', type: 'number', handler: () => handleNumber('4') },
+                    { label: '5', type: 'number', handler: () => handleNumber('5') },
+                    { label: '6', type: 'number', handler: () => handleNumber('6') },
+                    { label: '−', type: 'operator', handler: () => handleOperator('-') },
+                    { label: 'e', type: 'constant', handler: () => handleConstant('E') },
+                ],
+                // Row 6: 1, 2, 3, +, =
+                [
+                    { label: '1', type: 'number', handler: () => handleNumber('1') },
+                    { label: '2', type: 'number', handler: () => handleNumber('2') },
+                    { label: '3', type: 'number', handler: () => handleNumber('3') },
+                    { label: '+', type: 'operator', handler: () => handleOperator('+') },
+                    { label: '=', type: 'equals', handler: handleEquals, span: 1 },
+                ],
+                // Row 7: 0 (span 2), ., ±, memory buttons
+                [
+                    { label: '0', type: 'number', handler: () => handleNumber('0'), span: 2 },
+                    { label: '.', type: 'number', handler: () => handleNumber('.') },
+                    { label: '±', type: 'negate', handler: handleNegate },
+                    { label: 'M+', type: 'function', handler: () => handleMemory('M+'), small: true },
+                ],
+                // Row 8: Memory recall, clear, add, subtract (small buttons)
+                [
+                    { label: 'MC', type: 'function', handler: () => handleMemory('MC'), small: true },
+                    { label: 'MR', type: 'function', handler: () => handleMemory('MR'), small: true },
+                    { label: 'M−', type: 'function', handler: () => handleMemory('M-'), small: true },
+                    { label: '!', type: 'function', handler: () => handleScientific('factorial'), small: true },
+                    { label: '|x|', type: 'function', handler: () => handleScientific('abs'), small: true },
+                ],
+            ];
+
+            return (
+                React.createElement('div', { className: 'calculator' },
+
+                    // ── Display ──
+                    React.createElement('div', { className: 'display' },
+                        React.createElement('div', { className: 'expression' },
+                            expression || '\u200B'
+                        ),
+                        React.createElement('div', {
+                            className: 'result ' + getDisplayClass(),
+                            ref: displayRef,
+                        }, display),
+                        React.createElement('div', {
+                            className: 'memory-indicator' + (memoryIndicator ? ' active' : ''),
+                        }, memoryIndicator ? 'M' : '\u200B')
+                    ),
+
+                    // ── Buttons ──
+                    React.createElement('div', { className: 'buttons' },
+                        buttonRows.map((row, rowIndex) =>
+                            row.map((btn, colIndex) => {
+                                let className = 'btn ' + btn.type;
+                                if (btn.span) className += ' span-' + btn.span;
+                                if (btn.small) className += ' function';
+
+                                // Special case for equals in row 6
+                                if (btn.label === '=' && btn.type === 'equals') {
+                                    // We'll handle this specially
+                                }
+
+                                // For row 6, the = button should be styled as equals
+                                // But we need to handle the span for 0 in row 7
+
+                                const style = {};
+                                if (btn.span === 2) {
+                                    style.gridColumn = 'span 2';
+                                }
+
+                                // For the = button in row 6, we want it to be the equals style
+                                // but it's already in the row with type 'equals'
+
+                                return React.createElement(
+                                    'button',
+                                    {
+                                        key: `${rowIndex}-${colIndex}`,
+                                        className: className,
+                                        onClick: btn.handler,
+                                        style: style,
+                                    },
+                                    btn.label
+                                );
+                            })
+                        )
+                    )
+                )
+            );
+        }
+
+        // ─── Mount ───
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(React.createElement(Calculator));
+    </script>
+
+</body>
+</html>
