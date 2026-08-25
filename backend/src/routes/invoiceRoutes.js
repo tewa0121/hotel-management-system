@@ -1,480 +1,480 @@
-const express = require('express');
-const { pool } = require('../config/db');
-const { verifyToken, authorize } = require('../middleware/auth');
+// const express = require('express');
+// const { pool } = require('../config/db');
+// const { verifyToken, authorize } = require('../middleware/auth');
 
-const router = express.Router();
+// const router = express.Router();
 
-// Generate invoice number
-const generateInvoiceNumber = () => {
-  const date = new Date();
-  const year = date.getFullYear().toString().slice(-2);
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  const random = String(Math.floor(Math.random() * 10000)).padStart(4, '0');
-  return `INV-${year}${month}${day}-${random}`;
-};
+// // Generate invoice number
+// const generateInvoiceNumber = () => {
+//   const date = new Date();
+//   const year = date.getFullYear().toString().slice(-2);
+//   const month = String(date.getMonth() + 1).padStart(2, '0');
+//   const day = String(date.getDate()).padStart(2, '0');
+//   const random = String(Math.floor(Math.random() * 10000)).padStart(4, '0');
+//   return `INV-${year}${month}${day}-${random}`;
+// };
 
-// ============================================
-// GET INVOICE STATS (for dashboard cards)
-// ============================================
-router.get('/stats', verifyToken, async (req, res) => {
-  try {
-    // Total invoices
-    const [totalResult] = await pool.execute(
-      'SELECT COUNT(*) as total FROM invoices'
-    );
+// // ============================================
+// // GET INVOICE STATS (for dashboard cards)
+// // ============================================
+// router.get('/stats', verifyToken, async (req, res) => {
+//   try {
+//     // Total invoices
+//     const [totalResult] = await pool.execute(
+//       'SELECT COUNT(*) as total FROM invoices'
+//     );
 
-    // Paid invoices
-    const [paidResult] = await pool.execute(
-      'SELECT COUNT(*) as paid FROM invoices WHERE status = "paid"'
-    );
+//     // Paid invoices
+//     const [paidResult] = await pool.execute(
+//       'SELECT COUNT(*) as paid FROM invoices WHERE status = "paid"'
+//     );
 
-    // Overdue invoices
-    const [overdueResult] = await pool.execute(
-      'SELECT COUNT(*) as overdue FROM invoices WHERE status = "overdue"'
-    );
+//     // Overdue invoices
+//     const [overdueResult] = await pool.execute(
+//       'SELECT COUNT(*) as overdue FROM invoices WHERE status = "overdue"'
+//     );
 
-    // Total amount (sum of all invoices)
-    const [amountResult] = await pool.execute(
-      'SELECT COALESCE(SUM(total), 0) as totalAmount FROM invoices'
-    );
+//     // Total amount (sum of all invoices)
+//     const [amountResult] = await pool.execute(
+//       'SELECT COALESCE(SUM(total), 0) as totalAmount FROM invoices'
+//     );
 
-    // Draft invoices
-    const [draftResult] = await pool.execute(
-      'SELECT COUNT(*) as draft FROM invoices WHERE status = "draft"'
-    );
+//     // Draft invoices
+//     const [draftResult] = await pool.execute(
+//       'SELECT COUNT(*) as draft FROM invoices WHERE status = "draft"'
+//     );
 
-    // Sent invoices
-    const [sentResult] = await pool.execute(
-      'SELECT COUNT(*) as sent FROM invoices WHERE status = "sent"'
-    );
+//     // Sent invoices
+//     const [sentResult] = await pool.execute(
+//       'SELECT COUNT(*) as sent FROM invoices WHERE status = "sent"'
+//     );
 
-    res.json({
-      success: true,
-      data: {
-        total: totalResult[0].total || 0,
-        paid: paidResult[0].paid || 0,
-        overdue: overdueResult[0].overdue || 0,
-        draft: draftResult[0].draft || 0,
-        sent: sentResult[0].sent || 0,
-        totalAmount: amountResult[0].totalAmount || 0
-      }
-    });
-  } catch (error) {
-    console.error('Error fetching invoice stats:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Error fetching invoice stats'
-    });
-  }
-});
+//     res.json({
+//       success: true,
+//       data: {
+//         total: totalResult[0].total || 0,
+//         paid: paidResult[0].paid || 0,
+//         overdue: overdueResult[0].overdue || 0,
+//         draft: draftResult[0].draft || 0,
+//         sent: sentResult[0].sent || 0,
+//         totalAmount: amountResult[0].totalAmount || 0
+//       }
+//     });
+//   } catch (error) {
+//     console.error('Error fetching invoice stats:', error);
+//     res.status(500).json({
+//       success: false,
+//       message: 'Error fetching invoice stats'
+//     });
+//   }
+// });
 
-// ============================================
-// GET ALL INVOICES (with pagination & status filter)
-// ============================================
-router.get('/', verifyToken, async (req, res) => {
-  try {
-    const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 20;
-    const offset = (page - 1) * limit;
-    const status = req.query.status || '';
+// // ============================================
+// // GET ALL INVOICES (with pagination & status filter)
+// // ============================================
+// router.get('/', verifyToken, async (req, res) => {
+//   try {
+//     const page = parseInt(req.query.page) || 1;
+//     const limit = parseInt(req.query.limit) || 20;
+//     const offset = (page - 1) * limit;
+//     const status = req.query.status || '';
 
-    let query = `
-      SELECT i.*, 
-             g.first_name, g.last_name, g.email,
-             r.reservation_number,
-             rm.room_number
-      FROM invoices i
-      LEFT JOIN guests g ON i.guest_id = g.id
-      LEFT JOIN reservations r ON i.reservation_id = r.id
-      LEFT JOIN rooms rm ON r.room_id = rm.id
-      WHERE 1=1
-    `;
-    let countQuery = 'SELECT COUNT(*) as total FROM invoices WHERE 1=1';
-    const params = [];
+//     let query = `
+//       SELECT i.*, 
+//              g.first_name, g.last_name, g.email,
+//              r.reservation_number,
+//              rm.room_number
+//       FROM invoices i
+//       LEFT JOIN guests g ON i.guest_id = g.id
+//       LEFT JOIN reservations r ON i.reservation_id = r.id
+//       LEFT JOIN rooms rm ON r.room_id = rm.id
+//       WHERE 1=1
+//     `;
+//     let countQuery = 'SELECT COUNT(*) as total FROM invoices WHERE 1=1';
+//     const params = [];
 
-    if (status) {
-      query += ' AND i.status = ?';
-      countQuery += ' AND status = ?';
-      params.push(status);
-    }
+//     if (status) {
+//       query += ' AND i.status = ?';
+//       countQuery += ' AND status = ?';
+//       params.push(status);
+//     }
 
-    query += ' ORDER BY i.created_at DESC LIMIT ? OFFSET ?';
-    params.push(limit, offset);
+//     query += ' ORDER BY i.created_at DESC LIMIT ? OFFSET ?';
+//     params.push(limit, offset);
 
-    const [invoices] = await pool.execute(query, params);
-    const [countResult] = await pool.execute(countQuery, params.slice(0, params.length - 2));
+//     const [invoices] = await pool.execute(query, params);
+//     const [countResult] = await pool.execute(countQuery, params.slice(0, params.length - 2));
 
-    res.json({
-      success: true,
-      data: invoices,
-      pagination: {
-        page,
-        limit,
-        total: countResult[0].total,
-        totalPages: Math.ceil(countResult[0].total / limit)
-      }
-    });
-  } catch (error) {
-    console.error('Error fetching invoices:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Error fetching invoices'
-    });
-  }
-});
+//     res.json({
+//       success: true,
+//       data: invoices,
+//       pagination: {
+//         page,
+//         limit,
+//         total: countResult[0].total,
+//         totalPages: Math.ceil(countResult[0].total / limit)
+//       }
+//     });
+//   } catch (error) {
+//     console.error('Error fetching invoices:', error);
+//     res.status(500).json({
+//       success: false,
+//       message: 'Error fetching invoices'
+//     });
+//   }
+// });
 
-// ============================================
-// GET INVOICE BY ID
-// ============================================
-router.get('/:id', verifyToken, async (req, res) => {
-  try {
-    const [invoices] = await pool.execute(`
-      SELECT i.*, 
-             g.first_name, g.last_name, g.email, g.phone, g.address,
-             r.reservation_number, r.check_in_date, r.check_out_date,
-             rm.room_number, rt.name as room_type_name
-      FROM invoices i
-      LEFT JOIN guests g ON i.guest_id = g.id
-      LEFT JOIN reservations r ON i.reservation_id = r.id
-      LEFT JOIN rooms rm ON r.room_id = rm.id
-      LEFT JOIN room_types rt ON rm.room_type_id = rt.id
-      WHERE i.id = ?
-    `, [req.params.id]);
+// // ============================================
+// // GET INVOICE BY ID
+// // ============================================
+// router.get('/:id', verifyToken, async (req, res) => {
+//   try {
+//     const [invoices] = await pool.execute(`
+//       SELECT i.*, 
+//              g.first_name, g.last_name, g.email, g.phone, g.address,
+//              r.reservation_number, r.check_in_date, r.check_out_date,
+//              rm.room_number, rt.name as room_type_name
+//       FROM invoices i
+//       LEFT JOIN guests g ON i.guest_id = g.id
+//       LEFT JOIN reservations r ON i.reservation_id = r.id
+//       LEFT JOIN rooms rm ON r.room_id = rm.id
+//       LEFT JOIN room_types rt ON rm.room_type_id = rt.id
+//       WHERE i.id = ?
+//     `, [req.params.id]);
 
-    if (invoices.length === 0) {
-      return res.status(404).json({
-        success: false,
-        message: 'Invoice not found'
-      });
-    }
+//     if (invoices.length === 0) {
+//       return res.status(404).json({
+//         success: false,
+//         message: 'Invoice not found'
+//       });
+//     }
 
-    res.json({
-      success: true,
-      data: invoices[0]
-    });
-  } catch (error) {
-    console.error('Error fetching invoice:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Error fetching invoice'
-    });
-  }
-});
+//     res.json({
+//       success: true,
+//       data: invoices[0]
+//     });
+//   } catch (error) {
+//     console.error('Error fetching invoice:', error);
+//     res.status(500).json({
+//       success: false,
+//       message: 'Error fetching invoice'
+//     });
+//   }
+// });
 
-// ============================================
-// GET INVOICES BY RESERVATION
-// ============================================
-router.get('/reservation/:reservationId', verifyToken, async (req, res) => {
-  try {
-    const [invoices] = await pool.execute(`
-      SELECT i.*, 
-             g.first_name, g.last_name, g.email,
-             r.reservation_number
-      FROM invoices i
-      LEFT JOIN guests g ON i.guest_id = g.id
-      LEFT JOIN reservations r ON i.reservation_id = r.id
-      WHERE i.reservation_id = ?
-      ORDER BY i.created_at DESC
-    `, [req.params.reservationId]);
+// // ============================================
+// // GET INVOICES BY RESERVATION
+// // ============================================
+// router.get('/reservation/:reservationId', verifyToken, async (req, res) => {
+//   try {
+//     const [invoices] = await pool.execute(`
+//       SELECT i.*, 
+//              g.first_name, g.last_name, g.email,
+//              r.reservation_number
+//       FROM invoices i
+//       LEFT JOIN guests g ON i.guest_id = g.id
+//       LEFT JOIN reservations r ON i.reservation_id = r.id
+//       WHERE i.reservation_id = ?
+//       ORDER BY i.created_at DESC
+//     `, [req.params.reservationId]);
 
-    res.json({
-      success: true,
-      data: invoices
-    });
-  } catch (error) {
-    console.error('Error fetching reservation invoices:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Error fetching reservation invoices'
-    });
-  }
-});
+//     res.json({
+//       success: true,
+//       data: invoices
+//     });
+//   } catch (error) {
+//     console.error('Error fetching reservation invoices:', error);
+//     res.status(500).json({
+//       success: false,
+//       message: 'Error fetching reservation invoices'
+//     });
+//   }
+// });
 
-// ============================================
-// CREATE INVOICE
-// ============================================
-router.post('/', verifyToken, authorize('admin', 'manager', 'receptionist', 'accountant'), async (req, res) => {
-  const connection = await pool.getConnection();
-  try {
-    await connection.beginTransaction();
+// // ============================================
+// // CREATE INVOICE
+// // ============================================
+// router.post('/', verifyToken, authorize('admin', 'manager', 'receptionist', 'accountant'), async (req, res) => {
+//   const connection = await pool.getConnection();
+//   try {
+//     await connection.beginTransaction();
 
-    const {
-      reservation_id,
-      invoice_date,
-      due_date,
-      subtotal,
-      tax,
-      discount,
-      total,
-      notes
-    } = req.body;
+//     const {
+//       reservation_id,
+//       invoice_date,
+//       due_date,
+//       subtotal,
+//       tax,
+//       discount,
+//       total,
+//       notes
+//     } = req.body;
 
-    if (!reservation_id) {
-      return res.status(400).json({
-        success: false,
-        message: 'Reservation ID is required'
-      });
-    }
+//     if (!reservation_id) {
+//       return res.status(400).json({
+//         success: false,
+//         message: 'Reservation ID is required'
+//       });
+//     }
 
-    // Get reservation details
-    const [reservation] = await connection.execute(
-      'SELECT guest_id, total_amount FROM reservations WHERE id = ?',
-      [reservation_id]
-    );
+//     // Get reservation details
+//     const [reservation] = await connection.execute(
+//       'SELECT guest_id, total_amount FROM reservations WHERE id = ?',
+//       [reservation_id]
+//     );
 
-    if (reservation.length === 0) {
-      await connection.rollback();
-      return res.status(404).json({
-        success: false,
-        message: 'Reservation not found'
-      });
-    }
+//     if (reservation.length === 0) {
+//       await connection.rollback();
+//       return res.status(404).json({
+//         success: false,
+//         message: 'Reservation not found'
+//       });
+//     }
 
-    const invoice_number = generateInvoiceNumber();
+//     const invoice_number = generateInvoiceNumber();
 
-    const [result] = await connection.execute(
-      `INSERT INTO invoices (
-        invoice_number, reservation_id, guest_id, invoice_date, due_date,
-        subtotal, tax, discount, total, status, created_by, notes
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [
-        invoice_number,
-        reservation_id,
-        reservation[0].guest_id,
-        invoice_date || new Date().toISOString().split('T')[0],
-        due_date || null,
-        subtotal || reservation[0].total_amount || 0,
-        tax || 0,
-        discount || 0,
-        total || reservation[0].total_amount || 0,
-        'draft',
-        req.user.id,
-        notes || null
-      ]
-    );
+//     const [result] = await connection.execute(
+//       `INSERT INTO invoices (
+//         invoice_number, reservation_id, guest_id, invoice_date, due_date,
+//         subtotal, tax, discount, total, status, created_by, notes
+//       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+//       [
+//         invoice_number,
+//         reservation_id,
+//         reservation[0].guest_id,
+//         invoice_date || new Date().toISOString().split('T')[0],
+//         due_date || null,
+//         subtotal || reservation[0].total_amount || 0,
+//         tax || 0,
+//         discount || 0,
+//         total || reservation[0].total_amount || 0,
+//         'draft',
+//         req.user.id,
+//         notes || null
+//       ]
+//     );
 
-    await connection.commit();
+//     await connection.commit();
 
-    const [newInvoice] = await connection.execute(`
-      SELECT i.*, 
-             g.first_name, g.last_name,
-             r.reservation_number
-      FROM invoices i
-      LEFT JOIN guests g ON i.guest_id = g.id
-      LEFT JOIN reservations r ON i.reservation_id = r.id
-      WHERE i.id = ?
-    `, [result.insertId]);
+//     const [newInvoice] = await connection.execute(`
+//       SELECT i.*, 
+//              g.first_name, g.last_name,
+//              r.reservation_number
+//       FROM invoices i
+//       LEFT JOIN guests g ON i.guest_id = g.id
+//       LEFT JOIN reservations r ON i.reservation_id = r.id
+//       WHERE i.id = ?
+//     `, [result.insertId]);
 
-    res.status(201).json({
-      success: true,
-      message: 'Invoice created successfully',
-      data: newInvoice[0]
-    });
-  } catch (error) {
-    await connection.rollback();
-    console.error('Error creating invoice:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Error creating invoice'
-    });
-  } finally {
-    connection.release();
-  }
-});
+//     res.status(201).json({
+//       success: true,
+//       message: 'Invoice created successfully',
+//       data: newInvoice[0]
+//     });
+//   } catch (error) {
+//     await connection.rollback();
+//     console.error('Error creating invoice:', error);
+//     res.status(500).json({
+//       success: false,
+//       message: 'Error creating invoice'
+//     });
+//   } finally {
+//     connection.release();
+//   }
+// });
 
-// ============================================
-// UPDATE INVOICE
-// ============================================
-router.put('/:id', verifyToken, authorize('admin', 'manager', 'accountant'), async (req, res) => {
-  try {
-    const {
-      invoice_date,
-      due_date,
-      subtotal,
-      tax,
-      discount,
-      total,
-      status,
-      notes
-    } = req.body;
+// // ============================================
+// // UPDATE INVOICE
+// // ============================================
+// router.put('/:id', verifyToken, authorize('admin', 'manager', 'accountant'), async (req, res) => {
+//   try {
+//     const {
+//       invoice_date,
+//       due_date,
+//       subtotal,
+//       tax,
+//       discount,
+//       total,
+//       status,
+//       notes
+//     } = req.body;
 
-    const [result] = await pool.execute(
-      `UPDATE invoices SET
-        invoice_date = ?,
-        due_date = ?,
-        subtotal = ?,
-        tax = ?,
-        discount = ?,
-        total = ?,
-        status = ?,
-        notes = ?
-      WHERE id = ?`,
-      [
-        invoice_date, due_date, subtotal, tax,
-        discount, total, status, notes, req.params.id
-      ]
-    );
+//     const [result] = await pool.execute(
+//       `UPDATE invoices SET
+//         invoice_date = ?,
+//         due_date = ?,
+//         subtotal = ?,
+//         tax = ?,
+//         discount = ?,
+//         total = ?,
+//         status = ?,
+//         notes = ?
+//       WHERE id = ?`,
+//       [
+//         invoice_date, due_date, subtotal, tax,
+//         discount, total, status, notes, req.params.id
+//       ]
+//     );
 
-    if (result.affectedRows === 0) {
-      return res.status(404).json({
-        success: false,
-        message: 'Invoice not found'
-      });
-    }
+//     if (result.affectedRows === 0) {
+//       return res.status(404).json({
+//         success: false,
+//         message: 'Invoice not found'
+//       });
+//     }
 
-    const [updatedInvoice] = await pool.execute(`
-      SELECT i.*, 
-             g.first_name, g.last_name,
-             r.reservation_number
-      FROM invoices i
-      LEFT JOIN guests g ON i.guest_id = g.id
-      LEFT JOIN reservations r ON i.reservation_id = r.id
-      WHERE i.id = ?
-    `, [req.params.id]);
+//     const [updatedInvoice] = await pool.execute(`
+//       SELECT i.*, 
+//              g.first_name, g.last_name,
+//              r.reservation_number
+//       FROM invoices i
+//       LEFT JOIN guests g ON i.guest_id = g.id
+//       LEFT JOIN reservations r ON i.reservation_id = r.id
+//       WHERE i.id = ?
+//     `, [req.params.id]);
 
-    res.json({
-      success: true,
-      message: 'Invoice updated successfully',
-      data: updatedInvoice[0]
-    });
-  } catch (error) {
-    console.error('Error updating invoice:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Error updating invoice'
-    });
-  }
-});
+//     res.json({
+//       success: true,
+//       message: 'Invoice updated successfully',
+//       data: updatedInvoice[0]
+//     });
+//   } catch (error) {
+//     console.error('Error updating invoice:', error);
+//     res.status(500).json({
+//       success: false,
+//       message: 'Error updating invoice'
+//     });
+//   }
+// });
 
-// ============================================
-// DOWNLOAD INVOICE (PDF placeholder)
-// ============================================
-router.get('/:id/download', verifyToken, async (req, res) => {
-  try {
-    const [invoice] = await pool.execute(`
-      SELECT i.*, 
-             g.first_name, g.last_name, g.email, g.phone, g.address,
-             r.reservation_number, r.check_in_date, r.check_out_date,
-             rm.room_number, rt.name as room_type_name
-      FROM invoices i
-      LEFT JOIN guests g ON i.guest_id = g.id
-      LEFT JOIN reservations r ON i.reservation_id = r.id
-      LEFT JOIN rooms rm ON r.room_id = rm.id
-      LEFT JOIN room_types rt ON rm.room_type_id = rt.id
-      WHERE i.id = ?
-    `, [req.params.id]);
+// // ============================================
+// // DOWNLOAD INVOICE (PDF placeholder)
+// // ============================================
+// router.get('/:id/download', verifyToken, async (req, res) => {
+//   try {
+//     const [invoice] = await pool.execute(`
+//       SELECT i.*, 
+//              g.first_name, g.last_name, g.email, g.phone, g.address,
+//              r.reservation_number, r.check_in_date, r.check_out_date,
+//              rm.room_number, rt.name as room_type_name
+//       FROM invoices i
+//       LEFT JOIN guests g ON i.guest_id = g.id
+//       LEFT JOIN reservations r ON i.reservation_id = r.id
+//       LEFT JOIN rooms rm ON r.room_id = rm.id
+//       LEFT JOIN room_types rt ON rm.room_type_id = rt.id
+//       WHERE i.id = ?
+//     `, [req.params.id]);
 
-    if (invoice.length === 0) {
-      return res.status(404).json({
-        success: false,
-        message: 'Invoice not found'
-      });
-    }
+//     if (invoice.length === 0) {
+//       return res.status(404).json({
+//         success: false,
+//         message: 'Invoice not found'
+//       });
+//     }
 
-    res.json({
-      success: true,
-      message: 'PDF download would be generated here',
-      data: invoice[0]
-    });
-  } catch (error) {
-    console.error('Error downloading invoice:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Error downloading invoice'
-    });
-  }
-});
+//     res.json({
+//       success: true,
+//       message: 'PDF download would be generated here',
+//       data: invoice[0]
+//     });
+//   } catch (error) {
+//     console.error('Error downloading invoice:', error);
+//     res.status(500).json({
+//       success: false,
+//       message: 'Error downloading invoice'
+//     });
+//   }
+// });
 
-// ============================================
-// SEND INVOICE EMAIL
-// ============================================
-router.post('/:id/send', verifyToken, authorize('admin', 'manager', 'receptionist', 'accountant'), async (req, res) => {
-  try {
-    const { email } = req.body;
+// // ============================================
+// // SEND INVOICE EMAIL
+// // ============================================
+// router.post('/:id/send', verifyToken, authorize('admin', 'manager', 'receptionist', 'accountant'), async (req, res) => {
+//   try {
+//     const { email } = req.body;
 
-    if (!email) {
-      return res.status(400).json({
-        success: false,
-        message: 'Email address is required'
-      });
-    }
+//     if (!email) {
+//       return res.status(400).json({
+//         success: false,
+//         message: 'Email address is required'
+//       });
+//     }
 
-    const [invoice] = await pool.execute(`
-      SELECT i.*, 
-             g.first_name, g.last_name, g.email as guest_email
-      FROM invoices i
-      LEFT JOIN guests g ON i.guest_id = g.id
-      WHERE i.id = ?
-    `, [req.params.id]);
+//     const [invoice] = await pool.execute(`
+//       SELECT i.*, 
+//              g.first_name, g.last_name, g.email as guest_email
+//       FROM invoices i
+//       LEFT JOIN guests g ON i.guest_id = g.id
+//       WHERE i.id = ?
+//     `, [req.params.id]);
 
-    if (invoice.length === 0) {
-      return res.status(404).json({
-        success: false,
-        message: 'Invoice not found'
-      });
-    }
+//     if (invoice.length === 0) {
+//       return res.status(404).json({
+//         success: false,
+//         message: 'Invoice not found'
+//       });
+//     }
 
-    // Update invoice status to 'sent'
-    await pool.execute(
-      'UPDATE invoices SET status = ? WHERE id = ?',
-      ['sent', req.params.id]
-    );
+//     // Update invoice status to 'sent'
+//     await pool.execute(
+//       'UPDATE invoices SET status = ? WHERE id = ?',
+//       ['sent', req.params.id]
+//     );
 
-    res.json({
-      success: true,
-      message: `Invoice sent to ${email}`,
-      data: {
-        to: email,
-        invoice_number: invoice[0].invoice_number
-      }
-    });
-  } catch (error) {
-    console.error('Error sending invoice email:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Error sending invoice email'
-    });
-  }
-});
+//     res.json({
+//       success: true,
+//       message: `Invoice sent to ${email}`,
+//       data: {
+//         to: email,
+//         invoice_number: invoice[0].invoice_number
+//       }
+//     });
+//   } catch (error) {
+//     console.error('Error sending invoice email:', error);
+//     res.status(500).json({
+//       success: false,
+//       message: 'Error sending invoice email'
+//     });
+//   }
+// });
 
-// ============================================
-// PRINT INVOICE (HTML placeholder)
-// ============================================
-router.get('/:id/print', verifyToken, async (req, res) => {
-  try {
-    const [invoice] = await pool.execute(`
-      SELECT i.*, 
-             g.first_name, g.last_name, g.email, g.phone, g.address,
-             r.reservation_number, r.check_in_date, r.check_out_date,
-             rm.room_number, rt.name as room_type_name
-      FROM invoices i
-      LEFT JOIN guests g ON i.guest_id = g.id
-      LEFT JOIN reservations r ON i.reservation_id = r.id
-      LEFT JOIN rooms rm ON r.room_id = rm.id
-      LEFT JOIN room_types rt ON rm.room_type_id = rt.id
-      WHERE i.id = ?
-    `, [req.params.id]);
+// // ============================================
+// // PRINT INVOICE (HTML placeholder)
+// // ============================================
+// router.get('/:id/print', verifyToken, async (req, res) => {
+//   try {
+//     const [invoice] = await pool.execute(`
+//       SELECT i.*, 
+//              g.first_name, g.last_name, g.email, g.phone, g.address,
+//              r.reservation_number, r.check_in_date, r.check_out_date,
+//              rm.room_number, rt.name as room_type_name
+//       FROM invoices i
+//       LEFT JOIN guests g ON i.guest_id = g.id
+//       LEFT JOIN reservations r ON i.reservation_id = r.id
+//       LEFT JOIN rooms rm ON r.room_id = rm.id
+//       LEFT JOIN room_types rt ON rm.room_type_id = rt.id
+//       WHERE i.id = ?
+//     `, [req.params.id]);
 
-    if (invoice.length === 0) {
-      return res.status(404).json({
-        success: false,
-        message: 'Invoice not found'
-      });
-    }
+//     if (invoice.length === 0) {
+//       return res.status(404).json({
+//         success: false,
+//         message: 'Invoice not found'
+//       });
+//     }
 
-    res.json({
-      success: true,
-      message: 'Print view would be generated here',
-      data: invoice[0]
-    });
-  } catch (error) {
-    console.error('Error printing invoice:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Error printing invoice'
-    });
-  }
-});
+//     res.json({
+//       success: true,
+//       message: 'Print view would be generated here',
+//       data: invoice[0]
+//     });
+//   } catch (error) {
+//     console.error('Error printing invoice:', error);
+//     res.status(500).json({
+//       success: false,
+//       message: 'Error printing invoice'
+//     });
+//   }
+// });
 
-module.exports = router;
+// module.exports = router;
