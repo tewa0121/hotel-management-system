@@ -1,4 +1,4 @@
-const { pool } = require('../config/database');
+const { pool } = require('../config/db');
 
 class Expense {
     static async findAll(page = 1, limit = 20, category = '', startDate = '', endDate = '') {

@@ -1,4 +1,14 @@
-const { pool } = require('../config/database');
+const { pool } = require('../config/db');
+
+// mysql2 refuses `undefined` as a bind value, so anything missing/empty becomes NULL
+const toNull = (value) => (value === undefined || value === '' ? null : value);
+const withDefault = (value, fallback) => (value === undefined || value === null || value === '' ? fallback : value);
+
+// Columns that can be changed through update()
+const UPDATABLE_FIELDS = [
+    'room_number', 'room_type_id', 'floor', 'building', 'status',
+    'housekeeping_status', 'price_override', 'amenities', 'notes', 'is_active'
+];
 
 class Room {
     static async findAll() {
@@ -8,6 +18,30 @@ class Room {
             LEFT JOIN room_types rt ON r.room_type_id = rt.id
             WHERE r.is_active = TRUE
             ORDER BY r.room_number
+        `);
+        return rows;
+    }
+
+    // Same as findAll, plus how many active reservations each room has (ordered by floor)
+    static async findStatusBoard() {
+        const [rows] = await pool.execute(`
+            SELECT
+                r.*,
+                rt.name as room_type_name,
+                rt.base_price,
+                rt.max_occupancy,
+                rt.bed_type,
+                (
+                    SELECT COUNT(*)
+                    FROM reservations res
+                    WHERE res.room_id = r.id
+                    AND res.reservation_status IN ('confirmed', 'checked_in')
+                    AND res.check_out_date >= CURDATE()
+                ) as current_reservations
+            FROM rooms r
+            LEFT JOIN room_types rt ON r.room_type_id = rt.id
+            WHERE r.is_active = TRUE
+            ORDER BY r.floor, r.room_number
         `);
         return rows;
     }
@@ -42,18 +76,30 @@ class Room {
                 housekeeping_status, price_override, amenities, notes
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [
-                room_number, room_type_id, floor, building, status || 'available',
-                housekeeping_status || 'clean', price_override, amenities, notes
+                room_number,
+                room_type_id,
+                withDefault(floor, 1),
+                withDefault(building, 'Main'),
+                withDefault(status, 'available'),
+                withDefault(housekeeping_status, 'clean'),
+                toNull(price_override),
+                toNull(amenities),
+                toNull(notes)
             ]
         );
         return this.findById(result.insertId);
     }
 
+    // Partial updates are supported: fields that are not sent keep their current value.
+    // Returns null when the room does not exist.
     static async update(id, data) {
-        const {
-            room_number, room_type_id, floor, building, status,
-            housekeeping_status, price_override, amenities, notes, is_active
-        } = data;
+        const existing = await this.findById(id);
+        if (!existing) return null;
+
+        const merged = {};
+        for (const field of UPDATABLE_FIELDS) {
+            merged[field] = data[field] !== undefined ? data[field] : existing[field];
+        }
 
         await pool.execute(
             `UPDATE rooms SET
@@ -62,9 +108,17 @@ class Room {
                 amenities = ?, notes = ?, is_active = ?
             WHERE id = ?`,
             [
-                room_number, room_type_id, floor, building,
-                status, housekeeping_status, price_override,
-                amenities, notes, is_active !== undefined ? is_active : true, id
+                merged.room_number,
+                merged.room_type_id,
+                withDefault(merged.floor, 1),
+                withDefault(merged.building, 'Main'),
+                merged.status,
+                merged.housekeeping_status,
+                toNull(merged.price_override),
+                toNull(merged.amenities),
+                toNull(merged.notes),
+                merged.is_active,
+                id
             ]
         );
         return this.findById(id);

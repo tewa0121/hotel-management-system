@@ -3,7 +3,26 @@ const RoomType = require('../models/RoomType');
 const { validateRoom } = require('../utils/validators');
 const { logActivity } = require('../middleware/auth');
 
-// Get all rooms
+const VALID_HOUSEKEEPING_STATUSES = ['clean', 'dirty', 'cleaning', 'inspected'];
+
+// Returns a list of error messages (an empty list means the data is valid)
+const getRoomErrors = (data) => {
+    const { errors } = validateRoom(data);
+    if (data.housekeeping_status && !VALID_HOUSEKEEPING_STATUSES.includes(data.housekeeping_status)) {
+        errors.push('Invalid housekeeping status');
+    }
+    return errors;
+};
+
+const validationFailed = (res, errors) => res.status(400).json({
+    success: false,
+    message: errors.join(', '),
+    errors
+});
+
+// ============================================
+// GET /api/rooms
+// ============================================
 const getRooms = async (req, res) => {
     try {
         const rooms = await Room.findAll();
@@ -20,10 +39,13 @@ const getRooms = async (req, res) => {
     }
 };
 
-// Get room status board
+// ============================================
+// GET /api/rooms/status-board
+// ============================================
 const getStatusBoard = async (req, res) => {
     try {
-        const rooms = await Room.findAll();
+        const rooms = await Room.findStatusBoard();
+
         const statusCounts = {
             available: 0,
             reserved: 0,
@@ -54,7 +76,28 @@ const getStatusBoard = async (req, res) => {
     }
 };
 
-// Get single room
+// ============================================
+// GET /api/rooms/types/all
+// ============================================
+const getRoomTypes = async (req, res) => {
+    try {
+        const types = await RoomType.findAll(true);
+        res.json({
+            success: true,
+            data: types
+        });
+    } catch (error) {
+        console.error('Error fetching room types:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error fetching room types'
+        });
+    }
+};
+
+// ============================================
+// GET /api/rooms/:id
+// ============================================
 const getRoom = async (req, res) => {
     try {
         const room = await Room.findById(req.params.id);
@@ -77,15 +120,14 @@ const getRoom = async (req, res) => {
     }
 };
 
-// Create room - ✅ HAS logActivity
+// ============================================
+// POST /api/rooms
+// ============================================
 const createRoom = async (req, res) => {
     try {
-        const validation = validateRoom(req.body);
-        if (!validation.isValid) {
-            return res.status(400).json({
-                success: false,
-                errors: validation.errors
-            });
+        const errors = getRoomErrors(req.body);
+        if (errors.length > 0) {
+            return validationFailed(res, errors);
         }
 
         const existing = await Room.findByRoomNumber(req.body.room_number);
@@ -98,15 +140,7 @@ const createRoom = async (req, res) => {
 
         const room = await Room.create(req.body);
 
-        await logActivity(
-            req.user.id,
-            'CREATE',
-            'room',
-            room.id,
-            null,
-            room,
-            req.ip
-        );
+        await logActivity(req.user.id, 'CREATE', 'room', room.id, null, room, req.ip);
 
         res.status(201).json({
             success: true,
@@ -115,6 +149,12 @@ const createRoom = async (req, res) => {
         });
     } catch (error) {
         console.error('Error creating room:', error);
+        if (error.code === 'ER_DUP_ENTRY') {
+            return res.status(400).json({
+                success: false,
+                message: 'Room number already exists'
+            });
+        }
         res.status(500).json({
             success: false,
             message: 'Error creating room'
@@ -122,7 +162,9 @@ const createRoom = async (req, res) => {
     }
 };
 
-// Update room - ✅ HAS logActivity
+// ============================================
+// PUT /api/rooms/:id  (partial updates allowed)
+// ============================================
 const updateRoom = async (req, res) => {
     try {
         const room = await Room.findById(req.params.id);
@@ -133,17 +175,25 @@ const updateRoom = async (req, res) => {
             });
         }
 
+        // Validate the room as it WILL look after the update
+        const errors = getRoomErrors({ ...room, ...req.body });
+        if (errors.length > 0) {
+            return validationFailed(res, errors);
+        }
+
+        if (req.body.room_number && req.body.room_number !== room.room_number) {
+            const duplicate = await Room.findByRoomNumber(req.body.room_number);
+            if (duplicate) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Room number already exists'
+                });
+            }
+        }
+
         const updated = await Room.update(req.params.id, req.body);
 
-        await logActivity(
-            req.user.id,
-            'UPDATE',
-            'room',
-            updated.id,
-            room,
-            updated,
-            req.ip
-        );
+        await logActivity(req.user.id, 'UPDATE', 'room', updated.id, room, updated, req.ip);
 
         res.json({
             success: true,
@@ -165,7 +215,9 @@ const updateRoom = async (req, res) => {
     }
 };
 
-// Delete room - ✅ HAS logActivity
+// ============================================
+// DELETE /api/rooms/:id
+// ============================================
 const deleteRoom = async (req, res) => {
     try {
         const room = await Room.findById(req.params.id);
@@ -178,15 +230,7 @@ const deleteRoom = async (req, res) => {
 
         await Room.delete(req.params.id);
 
-        await logActivity(
-            req.user.id,
-            'DELETE',
-            'room',
-            req.params.id,
-            room,
-            null,
-            req.ip
-        );
+        await logActivity(req.user.id, 'DELETE', 'room', room.id, room, null, req.ip);
 
         res.json({
             success: true,
@@ -194,7 +238,8 @@ const deleteRoom = async (req, res) => {
         });
     } catch (error) {
         console.error('Error deleting room:', error);
-        if (error.code === 'ER_ROW_IS_REFERENCED') {
+        // MySQL reports a blocked delete (reservations point at this room) as ER_ROW_IS_REFERENCED_2
+        if (error.code === 'ER_ROW_IS_REFERENCED_2' || error.code === 'ER_ROW_IS_REFERENCED') {
             return res.status(400).json({
                 success: false,
                 message: 'Cannot delete room with existing reservations'
@@ -207,29 +252,12 @@ const deleteRoom = async (req, res) => {
     }
 };
 
-// Get room types
-const getRoomTypes = async (req, res) => {
-    try {
-        const types = await RoomType.findAll(true);
-        res.json({
-            success: true,
-            data: types
-        });
-    } catch (error) {
-        console.error('Error fetching room types:', error);
-        res.status(500).json({
-            success: false,
-            message: 'Error fetching room types'
-        });
-    }
-};
-
 module.exports = {
     getRooms,
     getStatusBoard,
+    getRoomTypes,
     getRoom,
     createRoom,
     updateRoom,
-    deleteRoom,
-    getRoomTypes
+    deleteRoom
 };

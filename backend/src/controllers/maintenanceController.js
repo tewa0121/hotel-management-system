@@ -1,4 +1,4 @@
-const { pool } = require('../config/database'); // ← ADD THIS IMPORT
+const { pool } = require('../config/db'); // ← ADD THIS IMPORT
 const Maintenance = require('../models/Maintenance');
 const Room = require('../models/Room');
 const { validateMaintenance } = require('../utils/validators');

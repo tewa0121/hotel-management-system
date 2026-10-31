@@ -1,7 +1,7 @@
 {
   "name": "hotel-management-backend",
   "version": "1.0.0",
-  "description": "Hotel Management System Backend API",
+  "description": "REST API for a full-featured Hotel Management System (rooms, reservations, billing, housekeeping, maintenance, food service)",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
@@ -11,15 +11,21 @@
     "hotel",
     "management",
     "api",
-    "nodejs"
+    "nodejs",
+    "express",
+    "mysql"
   ],
-  "author": "",
+  "engines": {
+    "node": ">=18"
+  },
   "license": "MIT",
   "dependencies": {
     "bcryptjs": "^2.4.3",
     "cors": "^2.8.6",
     "dotenv": "^16.6.1",
     "express": "^4.22.2",
+    "express-rate-limit": "^7.5.1",
+    "helmet": "^8.3.0",
     "jsonwebtoken": "^9.0.3",
     "mysql2": "^3.23.3",
     "nodemailer": "^9.0.5"

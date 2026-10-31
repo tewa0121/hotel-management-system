@@ -7,7 +7,7 @@ const { pool } = require('../config/db');
 const verifyToken = async (req, res, next) => {
     try {
         const token = req.headers.authorization?.split(' ')[1];
-        
+
         if (!token) {
             return res.status(401).json({
                 success: false,
@@ -15,21 +15,16 @@ const verifyToken = async (req, res, next) => {
             });
         }
 
-        console.log('🔍 Verifying token:', token.substring(0, 20) + '...');
-
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
-        console.log('✅ Token decoded:', decoded);
 
-        // ✅ Check if it's a guest token (has 'id' and role 'guest')
+        // Guest token (has 'id' and role 'guest')
         if (decoded.role === 'guest' || decoded.id) {
-            // Guest token – removed 'is_active' because it doesn't exist
             const [guests] = await pool.execute(
                 'SELECT id, first_name, last_name, email, phone, total_stays, total_spent FROM guests WHERE id = ?',
                 [decoded.id || decoded.guestId]
             );
 
             if (guests.length === 0) {
-                console.log('❌ Guest not found for ID:', decoded.id);
                 return res.status(401).json({
                     success: false,
                     message: 'Guest not found'
@@ -42,11 +37,10 @@ const verifyToken = async (req, res, next) => {
                 role: 'guest',
                 name: `${guests[0].first_name} ${guests[0].last_name}`
             };
-            console.log('✅ Guest authenticated:', req.user.email);
             return next();
         }
 
-        // ✅ Staff token (has 'userId')
+        // Staff token (has 'userId')
         if (decoded.userId) {
             const [users] = await pool.execute(
                 'SELECT id, name, email, role, is_active FROM users WHERE id = ? AND is_active = TRUE',
@@ -61,7 +55,6 @@ const verifyToken = async (req, res, next) => {
             }
 
             req.user = users[0];
-            console.log('✅ Staff authenticated:', req.user.email);
             return next();
         }
 
@@ -72,7 +65,6 @@ const verifyToken = async (req, res, next) => {
         });
 
     } catch (error) {
-        console.error('❌ Token verification failed:', error.message);
         if (error.name === 'JsonWebTokenError') {
             return res.status(401).json({
                 success: false,
@@ -85,6 +77,7 @@ const verifyToken = async (req, res, next) => {
                 message: 'Token expired'
             });
         }
+        console.error('Authentication error:', error.message);
         return res.status(500).json({
             success: false,
             message: 'Authentication error'
@@ -103,7 +96,7 @@ const authorize = (...roles) => {
                 message: 'Unauthorized'
             });
         }
-        
+
         // Guests cannot access staff routes
         if (req.user.role === 'guest') {
             return res.status(403).json({
@@ -111,14 +104,14 @@ const authorize = (...roles) => {
                 message: 'Guests are not authorized for this action'
             });
         }
-        
+
         if (!roles.includes(req.user.role)) {
             return res.status(403).json({
                 success: false,
                 message: 'Insufficient permissions'
             });
         }
-        
+
         next();
     };
 };
