@@ -1,4 +1,4 @@
-const { pool } = require('../config/database');
+const { pool } = require('../config/db');
 
 class Maintenance {
     static async findAll(status = '', priority = '') {

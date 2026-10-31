@@ -1,55 +1,37 @@
-npm run development# Dependencies
+# Dependencies
 node_modules/
+
+# Environment variables (the .example files ARE committed)
+.env
+.env.*
+!.env.example
+
+# Logs
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
-
-# Environment variables
-.env
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
-
-# Build outputs
-dist/
-build/
 *.log
 
-# IDE files
+# Build output
+dist/
+build/
+coverage/
+
+# IDE / OS files
 .vscode/
 .idea/
 *.swp
 *.swo
 *~
 .DS_Store
-
-# Database files
-*.sqlite
-*.db
-
-# OS files
 Thumbs.db
 desktop.ini
 
-# Backend specific
-backend/node_modules/
-backend/.env
-
-# Frontend specific
-frontend/node_modules/
-frontend/.env
-frontend/build/
-frontend/dist/
+# Local database files
+*.sqlite
+*.db
 
 # Temporary files
 tmp/
 temp/
 *.tmp
-
-# Coverage directory
-coverage/
-
-# Package lock files (optional - uncomment if you want to commit them)
-# package-lock.json
-# yarn.lock

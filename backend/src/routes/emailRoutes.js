@@ -1,5 +1,5 @@
 const express = require('express');
-const { pool } = require('../config/database');
+const { pool } = require('../config/db');
 const { verifyToken, authorize } = require('../middleware/auth');
 const {
     sendEmail,

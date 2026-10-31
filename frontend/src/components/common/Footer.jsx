@@ -19,6 +19,9 @@ const Footer = () => {
     const linkedinUrl =
         'https://www.linkedin.com/in/tewachew-melaku-6b5094408?utm_source=share_via&utm_content=profile&utm_medium=member_android';
 
+    // Add your Facebook profile URL here
+    const facebookUrl = 'https://www.facebook.com/yourusername';
+
     return (
         <footer className="bg-gradient-to-b from-gray-900 to-gray-950 text-white mt-12 border-t border-gray-800">
             <div className="max-w-7xl mx-auto px-4 py-12">
@@ -66,8 +69,10 @@ const Footer = () => {
 
                             {/* Facebook */}
                             <a
-                                href="#"
-                                className="bg-gray-800 p-2 rounded-lg hover:bg-gray-700 transition-all duration-300 hover:scale-110"
+                                href={facebookUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="bg-gray-800 p-2 rounded-lg hover:bg-blue-600 transition-all duration-300 hover:scale-110"
                                 aria-label="Facebook"
                                 title="Facebook"
                             >
@@ -99,7 +104,6 @@ const Footer = () => {
                         </div>
                     </div>
 
-
                     {/* Contact Info */}
                     <div>
                         <h4 className="text-lg font-semibold mb-4 text-gray-200 flex items-center gap-2">
@@ -127,7 +131,6 @@ const Footer = () => {
                                 </div>
                             </li>
 
-
                             {/* Phone */}
                             <li className="flex items-start gap-3 hover:text-white transition-colors group">
                                 <FaPhone className="text-primary-400 h-4 w-4 mt-0.5 group-hover:scale-110 transition-transform" />
@@ -145,7 +148,6 @@ const Footer = () => {
                                     </a>
                                 </div>
                             </li>
-
 
                             {/* GitHub */}
                             <li className="flex items-start gap-3 hover:text-white transition-colors group">
@@ -167,7 +169,6 @@ const Footer = () => {
                                 </div>
                             </li>
 
-
                             {/* LinkedIn */}
                             <li className="flex items-start gap-3 hover:text-white transition-colors group">
                                 <FaLinkedin className="text-primary-400 h-4 w-4 mt-0.5 group-hover:scale-110 transition-transform" />
@@ -188,6 +189,25 @@ const Footer = () => {
                                 </div>
                             </li>
 
+                            {/* Facebook */}
+                            <li className="flex items-start gap-3 hover:text-white transition-colors group">
+                                <FaFacebook className="text-primary-400 h-4 w-4 mt-0.5 group-hover:scale-110 transition-transform" />
+
+                                <div>
+                                    <p className="text-xs text-gray-500">
+                                        Facebook
+                                    </p>
+
+                                    <a
+                                        href={facebookUrl}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="hover:text-primary-400"
+                                    >
+                                        Facebook Profile
+                                    </a>
+                                </div>
+                            </li>
 
                             {/* Location */}
                             <li className="flex items-start gap-3 hover:text-white transition-colors group">
@@ -206,7 +226,6 @@ const Footer = () => {
 
                         </ul>
                     </div>
-
 
                     {/* Quick Links */}
                     <div>
@@ -267,7 +286,6 @@ const Footer = () => {
                                 </a>
                             </li>
 
-                            {/* Food Module */}
                             <li>
                                 <a
                                     href="/food/menu"
@@ -301,7 +319,6 @@ const Footer = () => {
                         </ul>
                     </div>
 
-
                     {/* Developer */}
                     <div>
                         <h4 className="text-lg font-semibold mb-4 text-gray-200 flex items-center gap-2">
@@ -312,7 +329,6 @@ const Footer = () => {
                         <div className="bg-gray-800/50 rounded-xl p-4 border border-gray-700">
 
                             <div className="flex items-center gap-3 mb-3">
-
                                 <div className="w-12 h-12 rounded-full bg-gradient-to-br from-primary-500 to-primary-600 flex items-center justify-center text-white font-bold text-lg">
                                     TM
                                 </div>
@@ -326,9 +342,7 @@ const Footer = () => {
                                         Full Stack Developer
                                     </p>
                                 </div>
-
                             </div>
-
 
                             <div className="space-y-2 text-sm">
 
@@ -343,7 +357,6 @@ const Footer = () => {
                                     <span>@tewa0121</span>
                                 </a>
 
-
                                 {/* LinkedIn */}
                                 <a
                                     href={linkedinUrl}
@@ -355,6 +368,16 @@ const Footer = () => {
                                     <span>LinkedIn Profile</span>
                                 </a>
 
+                                {/* Facebook */}
+                                <a
+                                    href={facebookUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="flex items-center gap-2 text-gray-400 hover:text-blue-500 transition-colors"
+                                >
+                                    <FaFacebook className="h-4 w-4" />
+                                    <span>Facebook Profile</span>
+                                </a>
 
                                 {/* Email */}
                                 <a
@@ -362,15 +385,15 @@ const Footer = () => {
                                     className="flex items-center gap-2 text-gray-400 hover:text-primary-400 transition-colors"
                                 >
                                     <FaEnvelope className="h-4 w-4" />
-                                    <span>tewachewmelaku6@gmail.com</span>
+                                    <span>
+                                        tewachewmelaku6@gmail.com
+                                    </span>
                                 </a>
 
                             </div>
                         </div>
                     </div>
-
                 </div>
-
 
                 {/* Bottom Bar */}
                 <div className="border-t border-gray-700 mt-10 pt-6">
@@ -387,7 +410,6 @@ const Footer = () => {
 
                             All rights reserved.
                         </p>
-
 
                         {/* Developer Credit */}
                         <div className="flex flex-wrap items-center gap-3 text-sm text-gray-400">
@@ -409,7 +431,6 @@ const Footer = () => {
 
                             <span className="text-gray-600">|</span>
 
-                            {/* LinkedIn */}
                             <a
                                 href={linkedinUrl}
                                 target="_blank"
@@ -423,7 +444,19 @@ const Footer = () => {
 
                             <span className="text-gray-600">|</span>
 
-                            {/* Version */}
+                            <a
+                                href={facebookUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="flex items-center gap-1 text-gray-400 hover:text-blue-500 transition-colors"
+                                title="Connect with Tewachew Melaku on Facebook"
+                            >
+                                <FaFacebook className="h-4 w-4" />
+                                <span>Facebook</span>
+                            </a>
+
+                            <span className="text-gray-600">|</span>
+
                             <span className="flex items-center gap-1">
                                 <FaCode className="h-3 w-3 text-gray-500" />
                                 v1.0.0

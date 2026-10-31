@@ -1,4 +1,4 @@
-const { pool } = require('../config/database');
+const { pool } = require('../config/db');
 const User = require('../models/User');
 const bcrypt = require('bcryptjs');
 const { logActivity } = require('../middleware/auth'); // ✅ ADD THIS
