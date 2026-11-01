@@ -10,6 +10,8 @@ const UPDATABLE_FIELDS = [
     'housekeeping_status', 'price_override', 'amenities', 'notes', 'is_active'
 ];
 
+// Methods that take an optional last argument `db` can run inside a transaction:
+// pass the transaction's connection instead of the shared pool.
 class Room {
     static async findAll() {
         const [rows] = await pool.execute(`
@@ -46,8 +48,8 @@ class Room {
         return rows;
     }
 
-    static async findById(id) {
-        const [rows] = await pool.execute(`
+    static async findById(id, db = pool) {
+        const [rows] = await db.execute(`
             SELECT r.*, rt.name as room_type_name, rt.base_price, rt.max_occupancy, rt.bed_type
             FROM rooms r
             LEFT JOIN room_types rt ON r.room_type_id = rt.id
@@ -129,12 +131,54 @@ class Room {
         return result.affectedRows > 0;
     }
 
-    static async updateStatus(id, status) {
-        await pool.execute('UPDATE rooms SET status = ? WHERE id = ?', [status, id]);
+    static async updateStatus(id, status, db = pool) {
+        await db.execute('UPDATE rooms SET status = ? WHERE id = ?', [status, id]);
     }
 
-    static async updateHousekeepingStatus(id, status) {
-        await pool.execute('UPDATE rooms SET housekeeping_status = ? WHERE id = ?', [status, id]);
+    static async updateHousekeepingStatus(id, status, db = pool) {
+        await db.execute('UPDATE rooms SET housekeeping_status = ? WHERE id = ?', [status, id]);
+    }
+
+    // After check-out: the room needs cleaning
+    static async markDirty(id, db = pool) {
+        await db.execute(
+            "UPDATE rooms SET status = 'dirty', housekeeping_status = 'dirty' WHERE id = ?",
+            [id]
+        );
+    }
+
+    // ============================================
+    // LOCK ROOMS (use inside a transaction only)
+    // Locks the given room rows until the transaction ends, so two people can never
+    // book / change the same room at the same moment. Rooms are always locked in
+    // ascending id order, which makes deadlocks between two requests impossible.
+    // IMPORTANT: call this BEFORE any other read in the transaction.
+    // ============================================
+    static async lockByIds(connection, ids) {
+        const unique = [...new Set(ids.map(Number))]
+            .filter(Number.isInteger)
+            .sort((a, b) => a - b);
+
+        if (unique.length === 0) return [];
+
+        const placeholders = unique.map(() => '?').join(', ');
+        const [rows] = await connection.execute(
+            `SELECT id, room_number, status, is_active, room_type_id
+             FROM rooms
+             WHERE id IN (${placeholders})
+             ORDER BY id
+             FOR UPDATE`,
+            unique
+        );
+        return rows;
+    }
+
+    static async getMaxOccupancy(roomTypeId, db = pool) {
+        const [rows] = await db.execute(
+            'SELECT max_occupancy FROM room_types WHERE id = ?',
+            [roomTypeId]
+        );
+        return rows[0] ? rows[0].max_occupancy : null;
     }
 
     static async getStatusSummary() {
@@ -147,6 +191,12 @@ class Room {
         return rows;
     }
 
+    // ============================================
+    // AVAILABLE ROOMS for a stay (YYYY-MM-DD dates)
+    // A stay is [check-in, check-out): leaving on the 5th does NOT conflict with
+    // someone else arriving on the 5th. Pending, confirmed and checked-in
+    // reservations all block a room.
+    // ============================================
     static async getAvailableRooms(checkIn, checkOut, roomTypeId = null, guests = null) {
         let query = `
             SELECT r.*, rt.name as room_type_name, rt.base_price, rt.max_occupancy
@@ -154,22 +204,16 @@ class Room {
             LEFT JOIN room_types rt ON r.room_type_id = rt.id
             WHERE r.is_active = TRUE
             AND r.status NOT IN ('maintenance', 'out_of_service')
-            AND r.id NOT IN (
-                SELECT room_id FROM reservations 
-                WHERE reservation_status IN ('confirmed', 'checked_in')
-                AND (
-                    (check_in_date <= ? AND check_out_date > ?) OR
-                    (check_in_date < ? AND check_out_date >= ?) OR
-                    (check_in_date >= ? AND check_out_date <= ?)
-                )
+            AND NOT EXISTS (
+                SELECT 1 FROM reservations res
+                WHERE res.room_id = r.id
+                AND res.reservation_status IN ('pending', 'confirmed', 'checked_in')
+                AND res.check_in_date < ?
+                AND res.check_out_date > ?
             )
         `;
 
-        const params = [
-            checkOut, checkIn,
-            checkOut, checkIn,
-            checkIn, checkOut
-        ];
+        const params = [checkOut, checkIn];
 
         if (roomTypeId) {
             query += ' AND r.room_type_id = ?';
