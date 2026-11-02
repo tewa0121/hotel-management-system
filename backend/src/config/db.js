@@ -5,13 +5,18 @@ dotenv.config();
 
 const DB_PORT = parseInt(process.env.DB_PORT, 10) || 8889; // MAMP default
 
-// Create connection pool
-const pool = mysql.createPool({
+// Connection settings (also used by initDatabase.js to create the database when it is missing)
+const dbConfig = {
     host: process.env.DB_HOST || 'localhost',
     port: DB_PORT,
     user: process.env.DB_USER || 'root',
     password: process.env.DB_PASSWORD || 'root',
-    database: process.env.DB_NAME || 'hotel_management',
+    database: process.env.DB_NAME || 'hotel_management'
+};
+
+// Create connection pool
+const pool = mysql.createPool({
+    ...dbConfig,
     waitForConnections: true,
     connectionLimit: 10,
     queueLimit: 0
@@ -36,5 +41,6 @@ const testConnection = async () => {
 
 module.exports = {
     pool: promisePool,
-    testConnection
+    testConnection,
+    dbConfig
 };

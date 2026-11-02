@@ -356,6 +356,43 @@ const tables = [
                 INDEX idx_order (order_id),
                 INDEX idx_item (food_item_id)
             )`
+    },
+    {
+        name: 'notifications',
+        sql: `
+            CREATE TABLE IF NOT EXISTS notifications (
+                id INT PRIMARY KEY AUTO_INCREMENT,
+                user_id INT NOT NULL,
+                message TEXT NOT NULL,
+                type VARCHAR(30) NOT NULL DEFAULT 'info',
+                link VARCHAR(255) NULL,
+                is_read BOOLEAN NOT NULL DEFAULT FALSE,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+                INDEX idx_user_read (user_id, is_read),
+                INDEX idx_created_at (created_at)
+            )`
+    },
+    {
+        name: 'settings',
+        sql: `
+            CREATE TABLE IF NOT EXISTS settings (
+                id INT PRIMARY KEY DEFAULT 1,
+                hotel_name VARCHAR(100) DEFAULT 'Hotel Management System',
+                hotel_address TEXT,
+                hotel_phone VARCHAR(20),
+                hotel_email VARCHAR(100),
+                hotel_logo VARCHAR(255),
+                currency VARCHAR(10) DEFAULT 'USD',
+                timezone VARCHAR(50) DEFAULT 'UTC',
+                check_in_time VARCHAR(10) DEFAULT '14:00',
+                check_out_time VARCHAR(10) DEFAULT '11:00',
+                tax_rate DECIMAL(5,2) DEFAULT 12.00,
+                service_charge DECIMAL(5,2) DEFAULT 5.00,
+                default_currency VARCHAR(10) DEFAULT 'USD',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+            )`
     }
 ];
 
